@@ -39,6 +39,7 @@ public struct ExperimentalUISettings: Codable, Equatable {
     public var experimentalCompatibility: Bool
     public var enableDebugDataDisplay: Bool
     public var fakeGlass: Bool
+    public var customLiquidGlass: Bool
     public var compressedEmojiCache: Bool
     public var localTranscription: Bool
     public var enableReactionOverrides: Bool
@@ -87,6 +88,7 @@ public struct ExperimentalUISettings: Codable, Equatable {
             experimentalCompatibility: false,
             enableDebugDataDisplay: false,
             fakeGlass: false,
+            customLiquidGlass: false,
             compressedEmojiCache: false,
             localTranscription: false,
             enableReactionOverrides: false,
@@ -136,6 +138,7 @@ public struct ExperimentalUISettings: Codable, Equatable {
         experimentalCompatibility: Bool,
         enableDebugDataDisplay: Bool,
         fakeGlass: Bool,
+        customLiquidGlass: Bool,
         compressedEmojiCache: Bool,
         localTranscription: Bool,
         enableReactionOverrides: Bool,
@@ -182,6 +185,7 @@ public struct ExperimentalUISettings: Codable, Equatable {
         self.experimentalCompatibility = experimentalCompatibility
         self.enableDebugDataDisplay = enableDebugDataDisplay
         self.fakeGlass = fakeGlass
+        self.customLiquidGlass = customLiquidGlass
         self.compressedEmojiCache = compressedEmojiCache
         self.localTranscription = localTranscription
         self.enableReactionOverrides = enableReactionOverrides
@@ -232,6 +236,7 @@ public struct ExperimentalUISettings: Codable, Equatable {
         self.experimentalCompatibility = (try container.decodeIfPresent(Int32.self, forKey: "experimentalCompatibility") ?? 0) != 0
         self.enableDebugDataDisplay = (try container.decodeIfPresent(Int32.self, forKey: "enableDebugDataDisplay") ?? 0) != 0
         self.fakeGlass = (try container.decodeIfPresent(Int32.self, forKey: "fakeGlass") ?? 0) != 0
+        self.customLiquidGlass = (try container.decodeIfPresent(Int32.self, forKey: "customLiquidGlass") ?? 0) != 0
         self.compressedEmojiCache = (try container.decodeIfPresent(Int32.self, forKey: "compressedEmojiCache") ?? 0) != 0
         self.localTranscription = (try container.decodeIfPresent(Int32.self, forKey: "localTranscription") ?? 0) != 0
         self.enableReactionOverrides = try container.decodeIfPresent(Bool.self, forKey: "enableReactionOverrides") ?? false
@@ -282,6 +287,7 @@ public struct ExperimentalUISettings: Codable, Equatable {
         try container.encode((self.experimentalCompatibility ? 1 : 0) as Int32, forKey: "experimentalCompatibility")
         try container.encode((self.enableDebugDataDisplay ? 1 : 0) as Int32, forKey: "enableDebugDataDisplay")
         try container.encode((self.fakeGlass ? 1 : 0) as Int32, forKey: "fakeGlass")
+        try container.encode((self.customLiquidGlass ? 1 : 0) as Int32, forKey: "customLiquidGlass")
         try container.encode((self.compressedEmojiCache ? 1 : 0) as Int32, forKey: "compressedEmojiCache")
         try container.encode((self.localTranscription ? 1 : 0) as Int32, forKey: "localTranscription")
         try container.encode(self.enableReactionOverrides, forKey: "enableReactionOverrides")

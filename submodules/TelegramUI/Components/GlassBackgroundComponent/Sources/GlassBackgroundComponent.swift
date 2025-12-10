@@ -327,7 +327,8 @@ public class GlassBackgroundView: UIView {
     public private(set) var params: Params?
         
     public static var useCustomGlassImpl: Bool = false
-    
+    public static var useCustomLiquidGlass: Bool = false
+
     public override init(frame: CGRect) {
         if #available(iOS 26.0, *), !GlassBackgroundView.useCustomGlassImpl {
             self.backgroundNode = nil
