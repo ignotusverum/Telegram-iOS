@@ -362,7 +362,7 @@ class TabBarNode: ASDisplayNode, ASGestureRecognizerDelegate {
         self.swipeAction = swipeAction
         self.theme = theme
 
-        self.backgroundNode = NavigationBackgroundNode(color: theme.rootController.tabBar.backgroundColor)
+        self.backgroundNode = NavigationBackgroundNode(color: theme.rootController.tabBar.backgroundColor, useBackdropLayer: sharedUseBackdropLayerForBlur)
         
         self.badgeImage = generateStretchableFilledCircleImage(diameter: 18.0, color: theme.rootController.tabBar.badgeBackgroundColor, strokeColor: theme.rootController.tabBar.badgeStrokeColor, strokeWidth: 1.0, backgroundColor: nil)!
         

@@ -1,5 +1,26 @@
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
 
+objc_library(
+    name = "DisplayObjC",
+    module_name = "DisplayObjC",
+    srcs = glob([
+        "Source/**/*.m",
+    ]),
+    hdrs = glob([
+        "Source/**/*.h",
+    ]),
+    copts = [
+        "-Werror",
+    ],
+    sdk_frameworks = [
+        "UIKit",
+        "QuartzCore",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
 swift_library(
     name = "Display",
     module_name = "Display",
@@ -16,6 +37,7 @@ swift_library(
     	"//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Markdown:Markdown",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
+        ":DisplayObjC",
     ],
     visibility = [
         "//visibility:public",

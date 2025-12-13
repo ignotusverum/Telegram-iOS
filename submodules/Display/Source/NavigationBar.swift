@@ -1,6 +1,7 @@
 import UIKit
 import AsyncDisplayKit
 import SwiftSignalKit
+import DisplayObjC
 
 private var backArrowImageCache: [Int32: UIImage] = [:]
 
@@ -137,26 +138,32 @@ public enum NavigationPreviousAction: Equatable {
 
 private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
 
+/// Global flag to enable CABackdropLayer for liquid glass compatibility
+/// Set this to true when using custom liquid glass effects
+public var sharedUseBackdropLayerForBlur: Bool = true
+
 public final class NavigationBackgroundNode: ASDisplayNode {
     private var _color: UIColor
 
     public var color: UIColor {
         return self._color
     }
-    
+
     private var enableBlur: Bool
     private var enableSaturation: Bool
     private var customBlurRadius: CGFloat?
+    private var useBackdropLayer: Bool
 
     public var effectView: UIVisualEffectView?
+    private var backdropLayer: CALayer?
     private let backgroundNode: ASDisplayNode
-    
+
     public var backgroundView: UIView {
         return self.backgroundNode.view
     }
 
     private var validLayout: (CGSize, CGFloat)?
-    
+
     public var backgroundCornerRadius: CGFloat {
         if let (_, cornerRadius) = self.validLayout {
             return cornerRadius
@@ -165,11 +172,12 @@ public final class NavigationBackgroundNode: ASDisplayNode {
         }
     }
 
-    public init(color: UIColor, enableBlur: Bool = true, enableSaturation: Bool = true, customBlurRadius: CGFloat? = nil) {
+    public init(color: UIColor, enableBlur: Bool = true, enableSaturation: Bool = true, customBlurRadius: CGFloat? = nil, useBackdropLayer: Bool = false) {
         self._color = .clear
         self.enableBlur = enableBlur
         self.enableSaturation = enableSaturation
         self.customBlurRadius = customBlurRadius
+        self.useBackdropLayer = useBackdropLayer
 
         self.backgroundNode = ASDisplayNode()
 
@@ -198,50 +206,88 @@ public final class NavigationBackgroundNode: ASDisplayNode {
             return
         }
         if self.enableBlur && !sharedIsReduceTransparencyEnabled && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {
-            if self.effectView == nil {
-                let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
-
-                for subview in effectView.subviews {
-                    if subview.description.contains("VisualEffectSubview") {
-                        subview.isHidden = true
+            if self.useBackdropLayer && BackdropLayerWrapper.isAvailable() {
+                // Use CABackdropLayer for liquid glass compatibility
+                if self.backdropLayer == nil {
+                    let blurIntensity: CGFloat = self.customBlurRadius.map { $0 / 45.0 } ?? 0.6
+                    let saturation: CGFloat = self.enableSaturation ? 1.4 : 1.0
+                    if let backdrop = BackdropLayerWrapper.createBackdropLayer(
+                        withFrame: self.validLayout.map { CGRect(origin: .zero, size: $0.0) } ?? self.bounds,
+                        blurIntensity: blurIntensity,
+                        saturation: saturation,
+                        scale: 0.5
+                    ) {
+                        if let (_, cornerRadius) = self.validLayout {
+                            backdrop.cornerRadius = cornerRadius
+                            backdrop.masksToBounds = !cornerRadius.isZero
+                        }
+                        self.backdropLayer = backdrop
+                        self.layer.insertSublayer(backdrop, at: 0)
                     }
                 }
+                // Remove effectView if it exists
+                if let effectView = self.effectView {
+                    self.effectView = nil
+                    effectView.removeFromSuperview()
+                }
+            } else {
+                // Use UIVisualEffectView (original behavior)
+                if self.effectView == nil {
+                    let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
 
-                if let sublayer = effectView.layer.sublayers?[0], let filters = sublayer.filters {
-                    sublayer.backgroundColor = nil
-                    sublayer.isOpaque = false
-                    var allowedKeys: [String] = [
-                        "gaussianBlur"
-                    ]
-                    if self.enableSaturation {
-                        allowedKeys.append("colorSaturate")
+                    for subview in effectView.subviews {
+                        if subview.description.contains("VisualEffectSubview") {
+                            subview.isHidden = true
+                        }
                     }
-                    sublayer.filters = filters.filter { filter in
-                        guard let filter = filter as? NSObject else {
+
+                    if let sublayer = effectView.layer.sublayers?[0], let filters = sublayer.filters {
+                        sublayer.backgroundColor = nil
+                        sublayer.isOpaque = false
+                        var allowedKeys: [String] = [
+                            "gaussianBlur"
+                        ]
+                        if self.enableSaturation {
+                            allowedKeys.append("colorSaturate")
+                        }
+                        sublayer.filters = filters.filter { filter in
+                            guard let filter = filter as? NSObject else {
+                                return true
+                            }
+                            let filterName = String(describing: filter)
+                            if !allowedKeys.contains(filterName) {
+                                return false
+                            }
+                            if let customBlurRadius = self.customBlurRadius, filterName == "gaussianBlur" {
+                                filter.setValue(customBlurRadius as NSNumber, forKey: "inputRadius")
+                            }
                             return true
                         }
-                        let filterName = String(describing: filter)
-                        if !allowedKeys.contains(filterName) {
-                            return false
-                        }
-                        if let customBlurRadius = self.customBlurRadius, filterName == "gaussianBlur" {
-                            filter.setValue(customBlurRadius as NSNumber, forKey: "inputRadius")
-                        }
-                        return true
                     }
-                }
 
-                if let (size, cornerRadius) = self.validLayout {
-                    effectView.frame = CGRect(origin: CGPoint(), size: size)
-                    ContainedViewLayoutTransition.immediate.updateCornerRadius(layer: effectView.layer, cornerRadius: cornerRadius)
-                    effectView.clipsToBounds = !cornerRadius.isZero
+                    if let (size, cornerRadius) = self.validLayout {
+                        effectView.frame = CGRect(origin: CGPoint(), size: size)
+                        ContainedViewLayoutTransition.immediate.updateCornerRadius(layer: effectView.layer, cornerRadius: cornerRadius)
+                        effectView.clipsToBounds = !cornerRadius.isZero
+                    }
+                    self.effectView = effectView
+                    self.view.insertSubview(effectView, at: 0)
                 }
-                self.effectView = effectView
-                self.view.insertSubview(effectView, at: 0)
+                // Remove backdropLayer if it exists
+                if let backdrop = self.backdropLayer {
+                    self.backdropLayer = nil
+                    backdrop.removeFromSuperlayer()
+                }
             }
-        } else if let effectView = self.effectView {
-            self.effectView = nil
-            effectView.removeFromSuperview()
+        } else {
+            if let effectView = self.effectView {
+                self.effectView = nil
+                effectView.removeFromSuperview()
+            }
+            if let backdrop = self.backdropLayer {
+                self.backdropLayer = nil
+                backdrop.removeFromSuperlayer()
+            }
         }
     }
 
@@ -278,14 +324,21 @@ public final class NavigationBackgroundNode: ASDisplayNode {
                 }
             }
         }
+        if let backdrop = self.backdropLayer, backdrop.frame != contentFrame {
+            transition.updateFrame(layer: backdrop, frame: contentFrame, beginWithCurrentState: true)
+        }
 
         transition.updateCornerRadius(node: self.backgroundNode, cornerRadius: cornerRadius)
         if let effectView = self.effectView {
             transition.updateCornerRadius(layer: effectView.layer, cornerRadius: cornerRadius)
             effectView.clipsToBounds = !cornerRadius.isZero
         }
+        if let backdrop = self.backdropLayer {
+            transition.updateCornerRadius(layer: backdrop, cornerRadius: cornerRadius)
+            backdrop.masksToBounds = !cornerRadius.isZero
+        }
     }
-    
+
     public func update(size: CGSize, cornerRadius: CGFloat = 0.0, animator: ControlledTransitionAnimator) {
         self.validLayout = (size, cornerRadius)
 
@@ -299,11 +352,18 @@ public final class NavigationBackgroundNode: ASDisplayNode {
                 }
             }
         }
+        if let backdrop = self.backdropLayer, backdrop.frame != contentFrame {
+            animator.updateFrame(layer: backdrop, frame: contentFrame, completion: nil)
+        }
 
         animator.updateCornerRadius(layer: self.backgroundNode.layer, cornerRadius: cornerRadius, completion: nil)
         if let effectView = self.effectView {
             animator.updateCornerRadius(layer: effectView.layer, cornerRadius: cornerRadius, completion: nil)
             effectView.clipsToBounds = !cornerRadius.isZero
+        }
+        if let backdrop = self.backdropLayer {
+            animator.updateCornerRadius(layer: backdrop, cornerRadius: cornerRadius, completion: nil)
+            backdrop.masksToBounds = !cornerRadius.isZero
         }
     }
 }
