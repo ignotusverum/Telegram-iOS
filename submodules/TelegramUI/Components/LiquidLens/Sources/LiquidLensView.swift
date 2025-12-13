@@ -4,6 +4,8 @@ import Display
 import ComponentFlow
 import GlassBackgroundComponent
 
+private let enableCustomLiquidGlass: Bool = true
+
 private final class RestingBackgroundView: UIVisualEffectView {
     var isDark: Bool?
 
@@ -139,7 +141,10 @@ public final class LiquidLensView: UIView {
         self.backgroundView.contentView.addSubview(self.containerView)
         self.containerView.isUserInteractionEnabled = false
         
-        if #available(iOS 26.0, *) {
+        if enableCustomLiquidGlass {
+            let customLens = LegacyLiquidLensView(frame: .zero)
+            self.lensView = customLens
+        } else if #available(iOS 26.0, *) {
             if let viewClass = NSClassFromString("_UILiquidLensView") as AnyObject as? NSObjectProtocol {
                 let allocSelector = NSSelectorFromString("alloc")
                 let initSelector = NSSelectorFromString("initWithRestingBackground:")
@@ -148,79 +153,92 @@ public final class LiquidLensView: UIView {
                 self.lensView = instance as? UIView
             }
         }
-        
+
         if let lensView = self.lensView {
             self.backgroundContainer.layer.zPosition = 1
             lensView.layer.zPosition = 10.0
-            
+
             self.liftedContainerView.addSubview(self.restingBackgroundView)
-            
+
             self.containerView.addSubview(self.liftedContainerView)
             self.containerView.addSubview(lensView)
             self.containerView.addSubview(self.contentView)
-            
-            lensView.perform(NSSelectorFromString("setLiftedContainerView:"), with: self.backgroundContainer.contentView)
-            lensView.perform(NSSelectorFromString("setLiftedContentView:"), with: self.liftedContainerView)
-            lensView.perform(NSSelectorFromString("setOverridePunchoutView:"), with: self.contentView)
-            
-            do {
-                let selector = NSSelectorFromString("setLiftedContentMode:")
-                if let method = lensView.method(for: selector) {
-                    typealias ObjCMethod = @convention(c) (AnyObject, Selector, Int32) -> Void
-                    let function = unsafeBitCast(method, to: ObjCMethod.self)
-                    function(lensView, selector, 1)
+
+            if let customLens = lensView as? LegacyLiquidLensView {
+                customLens.liftedContainerView = self.backgroundContainer.contentView
+                customLens.liftedContentView = self.liftedContainerView
+                customLens.overridePunchoutView = self.contentView
+                customLens.liftedContentMode = 1
+                customLens.style = 1
+                customLens.warpsContentBelow = true
+                customLens.restingBackgroundColor = UIColor(white: 0.0, alpha: 0.1)
+                self.setupContentMasks()
+            } else {
+                lensView.perform(NSSelectorFromString("setLiftedContainerView:"), with: self.backgroundContainer.contentView)
+                lensView.perform(NSSelectorFromString("setLiftedContentView:"), with: self.liftedContainerView)
+                lensView.perform(NSSelectorFromString("setOverridePunchoutView:"), with: self.contentView)
+
+                do {
+                    let selector = NSSelectorFromString("setLiftedContentMode:")
+                    if let method = lensView.method(for: selector) {
+                        typealias ObjCMethod = @convention(c) (AnyObject, Selector, Int32) -> Void
+                        let function = unsafeBitCast(method, to: ObjCMethod.self)
+                        function(lensView, selector, 1)
+                    }
                 }
-            }
-            
-            do {
-                let selector = NSSelectorFromString("setStyle:")
-                if let method = lensView.method(for: selector) {
-                    typealias ObjCMethod = @convention(c) (AnyObject, Selector, Int32) -> Void
-                    let function = unsafeBitCast(method, to: ObjCMethod.self)
-                    function(lensView, selector, 1)
+
+                do {
+                    let selector = NSSelectorFromString("setStyle:")
+                    if let method = lensView.method(for: selector) {
+                        typealias ObjCMethod = @convention(c) (AnyObject, Selector, Int32) -> Void
+                        let function = unsafeBitCast(method, to: ObjCMethod.self)
+                        function(lensView, selector, 1)
+                    }
                 }
-            }
-            
-            do {
-                let selector = NSSelectorFromString("setWarpsContentBelow:")
-                if let method = lensView.method(for: selector) {
-                    typealias ObjCMethod = @convention(c) (AnyObject, Selector, Bool) -> Void
-                    let function = unsafeBitCast(method, to: ObjCMethod.self)
-                    function(lensView, selector, true)
+
+                do {
+                    let selector = NSSelectorFromString("setWarpsContentBelow:")
+                    if let method = lensView.method(for: selector) {
+                        typealias ObjCMethod = @convention(c) (AnyObject, Selector, Bool) -> Void
+                        let function = unsafeBitCast(method, to: ObjCMethod.self)
+                        function(lensView, selector, true)
+                    }
                 }
+
+                lensView.setValue(UIColor(white: 0.0, alpha: 0.1), forKey: "restingBackgroundColor")
             }
-            
-            lensView.setValue(UIColor(white: 0.0, alpha: 0.1), forKey: "restingBackgroundColor")
         } else {
             let legacySelectionView = GlassBackgroundView.ContentImageView()
             self.legacySelectionView = legacySelectionView
             self.backgroundView.contentView.insertSubview(legacySelectionView, at: 0)
-            
-            let legacyContentMaskView = UIView()
-            legacyContentMaskView.backgroundColor = .white
-            self.legacyContentMaskView = legacyContentMaskView
-            self.contentView.mask = legacyContentMaskView
-            
-            if let filter = CALayer.luminanceToAlpha() {
-                legacyContentMaskView.layer.filters = [filter]
-            }
-            
-            let legacyContentMaskBlobView = UIImageView()
-            self.legacyContentMaskBlobView = legacyContentMaskBlobView
-            legacyContentMaskView.addSubview(legacyContentMaskBlobView)
-            
+
+            self.setupContentMasks()
             self.containerView.addSubview(self.contentView)
-            
-            let legacyLiftedContentBlobMaskView = UIImageView()
-            self.legacyLiftedContentBlobMaskView = legacyLiftedContentBlobMaskView
-            self.liftedContainerView.mask = legacyLiftedContentBlobMaskView
-            
             self.containerView.addSubview(self.liftedContainerView)
         }
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupContentMasks() {
+        let legacyContentMaskView = UIView()
+        legacyContentMaskView.backgroundColor = .white
+        self.legacyContentMaskView = legacyContentMaskView
+        self.contentView.mask = legacyContentMaskView
+
+        if let filter = CALayer.luminanceToAlpha() {
+            legacyContentMaskView.layer.filters = [filter]
+        }
+
+        let legacyContentMaskBlobView = UIImageView()
+        self.legacyContentMaskBlobView = legacyContentMaskBlobView
+        legacyContentMaskView.addSubview(legacyContentMaskBlobView)
+
+        let legacyLiftedContentBlobMaskView = UIImageView()
+        self.legacyLiftedContentBlobMaskView = legacyLiftedContentBlobMaskView
+        self.liftedContainerView.mask = legacyLiftedContentBlobMaskView
     }
 
     public func update(size: CGSize, selectionX: CGFloat, selectionWidth: CGFloat, isDark: Bool, isLifted: Bool, transition: ComponentTransition) {
@@ -252,12 +270,22 @@ public final class LiquidLensView: UIView {
 
         let transition: ComponentTransition = animated ? .easeInOut(duration: 0.3) : .immediate
 
-        if previousParams?.isLifted != params.isLifted {
+        if let customLens = lensView as? LegacyLiquidLensView {
+            let liftedInset: CGFloat = params.isLifted ? 8.0 : -4.0
+            transition.animateView {
+                customLens.bounds = CGRect(origin: CGPoint(), size: CGSize(width: params.baseFrame.width + liftedInset * 2.0, height: params.baseFrame.height + liftedInset * 2.0))
+                customLens.center = CGPoint(x: params.baseFrame.midX, y: params.baseFrame.midY)
+            }
+            if previousParams?.isLifted != params.isLifted {
+                customLens.setLifted(params.isLifted, animated: !transition.animation.isImmediate, alongsideAnimations: nil, completion: nil)
+            }
+            self.isApplyingLensParams = false
+        } else if previousParams?.isLifted != params.isLifted {
             let selector = NSSelectorFromString("setLifted:animated:alongsideAnimations:completion:")
             var shouldScheduleUpdate = false
             var didProcessUpdate = false
             self.pendingLensParams = params
-            if let lensView = self.lensView, let method = lensView.method(for: selector) {
+            if let method = lensView.method(for: selector) {
                 typealias ObjCMethod = @convention(c) (AnyObject, Selector, Bool, Bool, @escaping () -> Void, AnyObject?) -> Void
                 let function = unsafeBitCast(method, to: ObjCMethod.self)
                 function(lensView, selector, params.isLifted, !transition.animation.isImmediate, { [weak self] in
@@ -336,20 +364,24 @@ public final class LiquidLensView: UIView {
         if let legacyContentMaskView = self.legacyContentMaskView {
             transition.setFrame(view: legacyContentMaskView, frame: CGRect(origin: CGPoint(), size: params.size))
         }
-        if let legacyContentMaskBlobView = self.legacyContentMaskBlobView, let legacyLiftedContentBlobMaskView = self.legacyLiftedContentBlobMaskView, let legacySelectionView = self.legacySelectionView {
+        if let legacyContentMaskBlobView = self.legacyContentMaskBlobView, let legacyLiftedContentBlobMaskView = self.legacyLiftedContentBlobMaskView {
             let lensFrame = baseLensFrame.insetBy(dx: 4.0, dy: 4.0)
             let effectiveLensFrame = lensFrame.insetBy(dx: params.isLifted ? -2.0 : 0.0, dy: params.isLifted ? -2.0 : 0.0)
-            
+
             if legacyContentMaskBlobView.image?.size.height != lensFrame.height {
                 legacyContentMaskBlobView.image = generateStretchableFilledCircleImage(diameter: lensFrame.height, color: .black)
                 legacyLiftedContentBlobMaskView.image = legacyContentMaskBlobView.image
-                legacySelectionView.image = generateStretchableFilledCircleImage(diameter: lensFrame.height, color: .white)?.withRenderingMode(.alwaysTemplate)
             }
             transition.setFrame(view: legacyContentMaskBlobView, frame: effectiveLensFrame)
             transition.setFrame(view: legacyLiftedContentBlobMaskView, frame: effectiveLensFrame)
-            
-            legacySelectionView.tintColor = UIColor(white: params.isDark ? 1.0 : 0.0, alpha: params.isDark ? 0.1 : 0.075)
-            transition.setFrame(view: legacySelectionView, frame: effectiveLensFrame)
+
+            if let legacySelectionView {
+                if legacySelectionView.image?.size.height != lensFrame.height {
+                    legacySelectionView.image = generateStretchableFilledCircleImage(diameter: lensFrame.height, color: .white)?.withRenderingMode(.alwaysTemplate)
+                }
+                legacySelectionView.tintColor = UIColor(white: params.isDark ? 1.0 : 0.0, alpha: params.isDark ? 0.1 : 0.075)
+                transition.setFrame(view: legacySelectionView, frame: effectiveLensFrame)
+            }
         }
 
         transition.setFrame(view: self.restingBackgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
