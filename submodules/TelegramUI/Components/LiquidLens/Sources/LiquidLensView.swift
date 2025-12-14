@@ -271,7 +271,7 @@ public final class LiquidLensView: UIView {
         let transition: ComponentTransition = animated ? .easeInOut(duration: 0.3) : .immediate
 
         if let customLens = lensView as? LegacyLiquidLensView {
-            let liftedInset: CGFloat = params.isLifted ? 8.0 : -4.0
+            let liftedInset: CGFloat = params.isLifted ? 10.0 : -4.0
             transition.animateView {
                 customLens.bounds = CGRect(origin: CGPoint(), size: CGSize(width: params.baseFrame.width + liftedInset * 2.0, height: params.baseFrame.height + liftedInset * 2.0))
                 customLens.center = CGPoint(x: params.baseFrame.midX, y: params.baseFrame.midY)

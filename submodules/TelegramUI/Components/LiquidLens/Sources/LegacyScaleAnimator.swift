@@ -44,6 +44,7 @@ final class LegacyScaleAnimator {
         }
     }
 
+    func reset() {
         current = 0.0
         target = 0.0
         velocity = 0
