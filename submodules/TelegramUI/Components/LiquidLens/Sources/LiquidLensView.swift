@@ -160,19 +160,17 @@ public final class LiquidLensView: UIView {
 
             self.liftedContainerView.addSubview(self.restingBackgroundView)
 
-            self.containerView.addSubview(self.liftedContainerView)
+//            self.containerView.addSubview(self.liftedContainerView)
             self.containerView.addSubview(lensView)
             self.containerView.addSubview(self.contentView)
 
             if let customLens = lensView as? LegacyLiquidLensView {
                 customLens.liftedContainerView = self.backgroundContainer.contentView
                 customLens.liftedContentView = self.liftedContainerView
-                customLens.overridePunchoutView = self.contentView
                 customLens.liftedContentMode = 1
                 customLens.style = 1
                 customLens.warpsContentBelow = true
                 customLens.restingBackgroundColor = UIColor(white: 0.0, alpha: 0.1)
-                self.setupContentMasks()
             } else {
                 lensView.perform(NSSelectorFromString("setLiftedContainerView:"), with: self.backgroundContainer.contentView)
                 lensView.perform(NSSelectorFromString("setLiftedContentView:"), with: self.liftedContainerView)
@@ -271,14 +269,19 @@ public final class LiquidLensView: UIView {
         let transition: ComponentTransition = animated ? .easeInOut(duration: 0.3) : .immediate
 
         if let customLens = lensView as? LegacyLiquidLensView {
-            let liftedInset: CGFloat = params.isLifted ? 10.0 : -4.0
-            transition.animateView {
-                customLens.bounds = CGRect(origin: CGPoint(), size: CGSize(width: params.baseFrame.width + liftedInset * 2.0, height: params.baseFrame.height + liftedInset * 2.0))
-                customLens.center = CGPoint(x: params.baseFrame.midX, y: params.baseFrame.midY)
-            }
+            // Activate on first use to set up mask and metal rendering
+            customLens.activate()
+
+            // Set baseFrame - LegacyLiquidLensView handles all animation internally
+            // via spring physics and display link (no UIView animation here)
+            customLens.baseFrame = params.baseFrame
+
+            // Trigger lift state change if needed
             if previousParams?.isLifted != params.isLifted {
                 customLens.setLifted(params.isLifted, animated: !transition.animation.isImmediate, alongsideAnimations: nil, completion: nil)
             }
+
+            self.appliedLensParams = params
             self.isApplyingLensParams = false
         } else if previousParams?.isLifted != params.isLifted {
             let selector = NSSelectorFromString("setLifted:animated:alongsideAnimations:completion:")
@@ -338,6 +341,16 @@ public final class LiquidLensView: UIView {
             return
         }
         lensView.center = CGPoint(x: params.baseFrame.midX, y: params.baseFrame.midY)
+
+        // Update mask positions to follow lens in real-time
+        if let legacyContentMaskBlobView = self.legacyContentMaskBlobView,
+           let legacyLiftedContentBlobMaskView = self.legacyLiftedContentBlobMaskView {
+            let lensFrame = lensView.frame.insetBy(dx: 4.0, dy: 4.0)
+            let isLifted = self.params?.isLifted ?? false
+            let effectiveLensFrame = lensFrame.insetBy(dx: isLifted ? -2.0 : 0.0, dy: isLifted ? -2.0 : 0.0)
+            legacyContentMaskBlobView.frame = effectiveLensFrame
+            legacyLiftedContentBlobMaskView.frame = effectiveLensFrame
+        }
     }
 
     private func update(params: Params, transition: ComponentTransition) {
@@ -351,10 +364,10 @@ public final class LiquidLensView: UIView {
 
         transition.setFrame(view: self.backgroundContainer, frame: CGRect(origin: CGPoint(), size: params.size))
         self.backgroundContainer.update(size: params.size, isDark: params.isDark, transition: transition)
-        
+
         transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
         self.backgroundView.update(size: params.size, cornerRadius: params.size.height * 0.5, isDark: params.isDark, tintColor: GlassBackgroundView.TintColor.init(kind: .panel, color: UIColor(white: params.isDark ? 0.0 : 1.0, alpha: 0.6)), isInteractive: true, transition: transition)
-        
+
         transition.setFrame(view: self.contentView, frame: CGRect(origin: CGPoint(), size: params.size))
         transition.setFrame(view: self.liftedContainerView, frame: CGRect(origin: CGPoint(), size: params.size))
 
@@ -386,9 +399,18 @@ public final class LiquidLensView: UIView {
 
         transition.setFrame(view: self.restingBackgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
         self.restingBackgroundView.update(isDark: params.isDark)
-        transition.setAlpha(view: self.restingBackgroundView, alpha: params.isLifted ? 0.0 : 1.0)
+        // Only show restingBackgroundView for native lens, custom lens handles it internally
+        if self.lensView is LegacyLiquidLensView {
+            self.restingBackgroundView.isHidden = true
+        } else {
+            self.restingBackgroundView.isHidden = false
+            transition.setAlpha(view: self.restingBackgroundView, alpha: params.isLifted ? 0.0 : 1.0)
+        }
 
-        if params.isLifted {
+        // For custom lens, always run display link to update mask positions
+        // For native lens, only run when lifted
+        let needsDisplayLink = params.isLifted || (self.lensView is LegacyLiquidLensView)
+        if needsDisplayLink {
             if self.liftedDisplayLink == nil {
                 self.liftedDisplayLink = SharedDisplayLinkDriver.shared.add(framesPerSecond: .max, { [weak self] _ in
                     guard let self else {
@@ -402,4 +424,5 @@ public final class LiquidLensView: UIView {
             liftedDisplayLink.invalidate()
         }
     }
+
 }

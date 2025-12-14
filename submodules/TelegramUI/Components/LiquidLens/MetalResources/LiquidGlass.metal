@@ -70,7 +70,7 @@ namespace GlassEffects {
     // SDF Fill
     constant float fillTransitionOuter = 10.0;
     constant float fillTransitionInner = -5.0;
-    constant float3 fillTint = float3(0.2, 0.2, 0.3);
+    constant float3 fillTint = float3(0.0, 0.0, 0.0);
     constant float fillOpacity = 0.5;
 
     // SDF Specular
@@ -92,7 +92,7 @@ namespace GlassEffects {
     // Squircle (unselected tabs)
     constant float unselectedFillOuter = 5.0;
     constant float unselectedFillInner = -10.0;
-    constant float3 unselectedTint = float3(0.1);
+    constant float3 unselectedTint = float3(0.0);
 
     // Squash/Stretch Deformation
     constant float deformWidthMin = 0.94;
