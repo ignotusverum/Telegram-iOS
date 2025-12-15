@@ -6,25 +6,40 @@ public final class LegacyLiquidLensView: UIView {
 
     public struct Config {
         public var collapsedScale: CGFloat = 1.0
-        public var expandedScale: CGFloat = 1.4
-        public var metalShowThreshold: CGFloat = 1.05
-        public var fillHideThreshold: CGFloat = 1.08
+        public var expandedScale: CGFloat = 1.3
+
+        public var metalShowThreshold: CGFloat = 1.02
+        public var fillHideThreshold: CGFloat = 1.06
+
         public var collapsedInset: CGFloat = -4.0
-        public var liftedInset: CGFloat = 10.0
-        public var deformWidthFactor: CGFloat = 0.35
-        public var deformHeightFactor: CGFloat = 0.2625
-        public var liftStiffness: CGFloat = 300.0
-        public var liftDamping: CGFloat = 25.0
-        public var fillStiffness: CGFloat = 400.0
-        public var fillDamping: CGFloat = 25.0
-        public var deformStiffness: CGFloat = 300.0
-        public var deformDamping: CGFloat = 20.0
-        public var refractionStrength: Float = 6
-        public var specularIntensity: Float = 0.4
-        public var refractionZonePercent: Float = 0.4
-        public var edgeIntensity: Float = 0.8
+        public var liftedInset: CGFloat = 8.0
+
+        public var liftStiffness: CGFloat = 500.0
+        public var liftDamping: CGFloat = 26.0
+
+        public var fillStiffness: CGFloat = 550.0
+        public var fillDamping: CGFloat = 30.0
+
+        public var deformStiffness: CGFloat = 400.0
+        public var deformDamping: CGFloat = 22.0
+
+        public var hDeformWidthFactor: CGFloat = 0.50
+        public var hDeformHeightFactor: CGFloat = 0.35
+
+        public var vDeformWidthFactor: CGFloat = 0.40
+        public var vDeformHeightFactor: CGFloat = 0.55
+
+        public var refractionStrength: Float = 8
+        public var specularIntensity: Float = 0.35
+        public var refractionZonePercent: Float = 0.35
+        public var edgeIntensity: Float = 0.7
         public var verticalEdgeRefractionScale: Float = 1
         public var capturePadding: CGFloat = 60.0
+
+        public var shadowOpacity: Float = 0.2
+        public var shadowRadius: CGFloat = 12
+        public var shadowOffset: CGSize = CGSize(width: 0, height: 4)
+
         public static let `default` = Config()
     }
 
@@ -35,16 +50,29 @@ public final class LegacyLiquidLensView: UIView {
     public weak var liftedContainerView: UIView?
     public weak var liftedContentView: UIView?
 
+    private let restingBackgroundView: UIView
+
     public var baseFrame: CGRect = .zero {
         didSet {
             guard baseFrame != oldValue else { return }
+
+            if isLifted {
+                let deltaX = baseFrame.midX - oldValue.midX
+                let deltaY = baseFrame.midY - oldValue.midY
+                let now = CACurrentMediaTime()
+                let dt = lastFrameTime > 0 ? min(now - lastFrameTime, 1.0/30.0) : 1.0/120.0
+                let velocityX = deltaX / CGFloat(dt)
+                let velocityY = deltaY / CGFloat(dt)
+                wobbleAnimator.trackVelocity(CGPoint(x: velocityX, y: velocityY))
+            }
+
             updateFrameFromScale()
+            updateVisibility()
+            updateRestingFillFrame()
         }
     }
 
-    public var fillColor: UIColor = UIColor(white: 0.0, alpha: 0.1) {
-        didSet { restingFillView.backgroundColor = fillColor }
-    }
+    public var fillColor: UIColor = UIColor(white: 0.0, alpha: 0.1)
 
     public private(set) var isLifted = false
     public private(set) var isActivated = false
@@ -56,23 +84,22 @@ public final class LegacyLiquidLensView: UIView {
     private let wobbleAnimator = LegacyWobbleAnimator()
 
     private var hasValidBackdrop = false
-    private var lastCapturedDeform: CGFloat = 0
+    private var lastCapturedHDeform: CGFloat = 0
+    private var lastCapturedVDeform: CGFloat = 0
     private var pendingCompletion: ((Bool) -> Void)?
 
-    private var lastFrameX: CGFloat = 0
     private var lastFrameTime: CFTimeInterval = 0
     private var startTime: CFTimeInterval = 0
 
     private var captureRect: CGRect = .zero
     private var captureRectInWindow: CGRect = .zero
 
-    private lazy var restingFillView: UIView = {
-        let view = UIView()
-        view.backgroundColor = fillColor
-        view.layer.cornerCurve = .continuous
-        view.isUserInteractionEnabled = false
-        return view
-    }()
+    private var cachedBounds: CGRect = .zero
+    private var cachedCenter: CGPoint = .zero
+    private var cachedFillFrame: CGRect = .zero
+    private var cachedFillCornerRadius: CGFloat = 0
+    private var cachedMetalHidden: Bool = true
+
 
     private var metalContainerView: UIView?
     private var metalView: MTKView?
@@ -91,7 +118,8 @@ public final class LegacyLiquidLensView: UIView {
         (liftAnimator.current - config.collapsedScale) / (config.expandedScale - config.collapsedScale)
     }
 
-    public override init(frame: CGRect) {
+    public init(frame: CGRect, restingBackgroundView: UIView) {
+        self.restingBackgroundView = restingBackgroundView
         super.init(frame: frame)
         setup()
     }
@@ -103,7 +131,7 @@ public final class LegacyLiquidLensView: UIView {
     private func setup() {
         clipsToBounds = false
         layer.masksToBounds = false
-        addSubview(restingFillView)
+        addSubview(restingBackgroundView)
         setupMetal()
         applyAnimatorConfig()
         resetAnimatorValues()
@@ -196,20 +224,24 @@ public final class LegacyLiquidLensView: UIView {
     }
 
     private func expandAnimation(animated: Bool) {
+        wobbleAnimator.reset()
         fillAlphaAnimator.setValue(0, animated: false)
         fillScaleAnimator.target = 0.9
         fillDeformAnimator.setValue(0, animated: false)
+        wobbleAnimator.triggerLift()
         captureBackdrop()
         liftAnimator.setValue(config.expandedScale, animated: animated)
         startDisplayLink()
     }
 
     private func collapseAnimation(animated: Bool) {
-        let currentDeform = lastCapturedDeform
+        wobbleAnimator.release()
+        wobbleAnimator.triggerDrop()
+        let currentHDeform = lastCapturedHDeform
         liftAnimator.setValue(config.collapsedScale, animated: animated)
-        fillScaleAnimator.setValue(1.0, animated: false)
-        fillAlphaAnimator.setValue(1.0, animated: false)
-        fillDeformAnimator.setValue(currentDeform, animated: false)
+        fillScaleAnimator.target = 1.0
+        fillAlphaAnimator.target = 1.0
+        fillDeformAnimator.setValue(currentHDeform, animated: false)
         fillDeformAnimator.target = 0
     }
 
@@ -221,13 +253,26 @@ public final class LegacyLiquidLensView: UIView {
     private func update() {
         guard let renderer = renderer, let window = window, captureRectInWindow != .zero else { return }
 
+        let frameTimestamp = CACurrentMediaTime()
+        let dt = lastFrameTime == 0 ? 1.0 / 120.0 : min(frameTimestamp - lastFrameTime, 1.0 / 30.0)
+        lastFrameTime = frameTimestamp
+
         stepAnimators()
-        trackMotion()
+        wobbleAnimator.update(dt: CGFloat(dt))
+
+        let settled = !isAnimating && wobbleAnimator.isSettled
+        if settled && !isLifted {
+            checkCompletion()
+            stopDisplayLink()
+            return
+        }
+
         updateFrameFromScale()
         updateVisibility()
         updateRestingFillFrame()
         updateMetalFrame()
         updateShaderUniforms(renderer: renderer, screenScale: window.screen.scale)
+        updateShadow()
         checkCompletion()
     }
 
@@ -238,31 +283,24 @@ public final class LegacyLiquidLensView: UIView {
         fillDeformAnimator.step()
 
         if isLifted {
-            lastCapturedDeform = wobbleAnimator.normalizedValue
+            lastCapturedHDeform = wobbleAnimator.horizontalValue
+            lastCapturedVDeform = wobbleAnimator.verticalValue
         }
-    }
-
-    private func trackMotion() {
-        let now = CACurrentMediaTime()
-        let dt = lastFrameTime == 0 ? 1.0 / 120.0 : min(now - lastFrameTime, 1.0 / 30.0)
-        lastFrameTime = now
-
-        let currentX = frame.origin.x
-        let velocity = dt > 0 ? (currentX - lastFrameX) / CGFloat(dt) : 0
-        lastFrameX = currentX
-
-        wobbleAnimator.trackVelocity(velocity)
-        wobbleAnimator.update(dt: CGFloat(dt))
     }
 
     private func updateVisibility() {
         let scale = liftAnimator.current
+
         let showMetal = scale > config.metalShowThreshold && hasValidBackdrop
         let showFill = scale < config.fillHideThreshold
 
-        metalContainerView?.isHidden = !showMetal
-        metalView?.isPaused = !showMetal
-        restingFillView.alpha = showFill ? fillAlphaAnimator.current : 0
+        if showMetal != !cachedMetalHidden {
+            cachedMetalHidden = !showMetal
+            metalContainerView?.isHidden = !showMetal
+            metalView?.isPaused = !showMetal
+        }
+
+        restingBackgroundView.alpha = showFill ? fillAlphaAnimator.current : 0
     }
 
     private func updateFrameFromScale() {
@@ -270,24 +308,49 @@ public final class LegacyLiquidLensView: UIView {
 
         let inset = config.collapsedInset + (config.liftedInset - config.collapsedInset) * scaleProgress
 
-        bounds = CGRect(
+        let newBounds = CGRect(
             origin: .zero,
             size: CGSize(
                 width: baseFrame.width + inset * 2,
                 height: baseFrame.height + inset * 2
             )
         )
-        center = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
+        let newCenter = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
+
+        if newBounds != cachedBounds {
+            cachedBounds = newBounds
+            bounds = newBounds
+        }
+        if newCenter != cachedCenter {
+            cachedCenter = newCenter
+            center = newCenter
+        }
     }
 
     private func updateRestingFillFrame() {
-        guard baseFrame.width > 0 else { return }
+        guard baseFrame.width > 0, (restingBackgroundView.alpha > 0 || !fillAlphaAnimator.isSettled) else { return }
 
         let scale = fillScaleAnimator.current
-        let deform = fillDeformAnimator.current
 
-        let widthMult = 1.0 + deform * config.deformWidthFactor
-        let heightMult = 1.0 - deform * config.deformHeightFactor
+        let hDeform: CGFloat
+        if isLifted {
+            hDeform = wobbleAnimator.horizontalValue
+        } else {
+            hDeform = fillDeformAnimator.isSettled ? 0 : fillDeformAnimator.current
+        }
+
+        let hasOffset = abs(hDeform) > 0.001
+
+        let widthMult: CGFloat
+        let heightMult: CGFloat
+
+        if hasOffset {
+            widthMult = 1.0 - hDeform * config.hDeformWidthFactor
+            heightMult = 1.0 + hDeform * config.hDeformHeightFactor
+        } else {
+            widthMult = 1.0
+            heightMult = 1.0
+        }
 
         let baseWidth = baseFrame.width + config.collapsedInset * 2
         let baseHeight = baseFrame.height + config.collapsedInset * 2
@@ -295,13 +358,22 @@ public final class LegacyLiquidLensView: UIView {
         let width = baseWidth * scale * widthMult
         let height = baseHeight * scale * heightMult
 
-        restingFillView.frame = CGRect(
+        let newFrame = CGRect(
             x: bounds.midX - width / 2,
             y: bounds.midY - height / 2,
             width: width,
             height: height
         )
-        restingFillView.layer.cornerRadius = height / 2
+        let newRadius = height / 2
+
+        if newFrame != cachedFillFrame {
+            cachedFillFrame = newFrame
+            restingBackgroundView.frame = newFrame
+        }
+        if newRadius != cachedFillCornerRadius {
+            cachedFillCornerRadius = newRadius
+            restingBackgroundView.layer.cornerRadius = newRadius
+        }
     }
 
     private func updateMetalFrame() {
@@ -329,9 +401,29 @@ public final class LegacyLiquidLensView: UIView {
         u.refractionZonePercent = config.refractionZonePercent
         u.edgeIntensity = config.edgeIntensity
         u.verticalEdgeRefractionScale = config.verticalEdgeRefractionScale
-        u.scrollVelocity = SIMD2(Float(wobbleAnimator.normalizedValue), 0)
+        u.scrollVelocity = wobbleAnimator.normalizedVelocity
         u.time = Float(CACurrentMediaTime() - startTime)
         renderer.glassUniforms = u
+    }
+
+    private func updateShadow() {
+        let progress = scaleProgress
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = config.shadowOpacity * Float(progress)
+        layer.shadowRadius = config.shadowRadius * progress
+        layer.shadowOffset = CGSize(
+            width: config.shadowOffset.width * progress,
+            height: config.shadowOffset.height * progress
+        )
+
+        if progress > 0.01 {
+            layer.shadowPath = UIBezierPath(
+                roundedRect: bounds,
+                cornerRadius: bounds.height / 2
+            ).cgPath
+        } else {
+            layer.shadowPath = nil
+        }
     }
 
     private func checkCompletion() {
@@ -379,9 +471,7 @@ public final class LegacyLiquidLensView: UIView {
         guard displayLink == nil else { return }
 
         startTime = CACurrentMediaTime()
-        lastFrameX = frame.origin.x
         lastFrameTime = 0
-        wobbleAnimator.reset()
         metalView?.isPaused = false
 
         let link = CADisplayLink(target: self, selector: #selector(tick))

@@ -20,7 +20,7 @@ struct GlassUniforms {
     float  time;            // CACurrentMediaTime() for wobble animation
     float  edgeIntensity;   // 0 = no edge, 1 = full edge effects
     float  verticalEdgeRefractionScale;  // 1.0 = full, 0.5 = half refraction on vertical edges
-    float  _padding;  // Alignment padding to 64 bytes
+    float  _padding;  // Alignment padding
 };
 
 struct SdfUniforms {
@@ -93,11 +93,12 @@ namespace GlassEffects {
     constant float unselectedFillInner = -10.0;
     constant float3 unselectedTint = float3(0.0);
 
-    // Squash/Stretch Deformation
-    constant float deformWidthMin = 0.94;
-    constant float deformWidthMax = 1.06;
-    constant float deformHeightMin = 0.94;
-    constant float deformHeightMax = 1.06;
+    // Squash/Stretch Deformation (wider range for liquid feel)
+    constant float deformWidthMin = 0.82;
+    constant float deformWidthMax = 1.18;
+    constant float deformHeightMin = 0.82;
+    constant float deformHeightMax = 1.18;
+
 }
 
 // MARK: - SDF Functions
@@ -134,20 +135,21 @@ float sdSquashStretch(
     float velocityX,
     float deformAmount
 ) {
-    float widthMult  = 1.0 + velocityX * deformAmount;
-    float heightMult = 1.0 - velocityX * deformAmount * 0.75;  // Volume preservation
+    // INVERTED: negative velocity (moving left) = stretch wider
+    float widthMult  = 1.0 - velocityX * deformAmount;
+    float heightMult = 1.0 + velocityX * deformAmount * 0.75;  // Volume preservation
 
-    // Safety limits (5-10% max deformation)
-    widthMult  = clamp(widthMult, GlassEffects::deformWidthMin, GlassEffects::deformWidthMax);
-    heightMult = clamp(heightMult, GlassEffects::deformHeightMin, GlassEffects::deformHeightMax);
+    // Wider range for more liquid deformation
+    widthMult  = clamp(widthMult, 0.82, 1.18);
+    heightMult = clamp(heightMult, 0.82, 1.18);
 
     float2 deformedHalfSize = float2(
         halfSize.x * widthMult,
         halfSize.y * heightMult
     );
 
-    // Offset in movement direction (leading edge moves more)
-    float offset = halfSize.x * (widthMult - 1.0) * 0.1;
+    // Offset in movement direction (trailing sloshing effect)
+    float offset = halfSize.x * (widthMult - 1.0) * 0.15;
     float2 adjustedPos = pos - float2(offset, 0.0);
 
     float radius = min(deformedHalfSize.x, deformedHalfSize.y);  // True pill shape
@@ -492,7 +494,7 @@ fragment float4 liquidGlassTabBarFragment(
     float2 glassCenter = glass.glassOrigin + glass.glassSize * 0.5;
     float2 relativePos = pixelPos - glassCenter;
     float2 halfSize = glass.glassSize * 0.5;
-    float glassSdf = sdSquashStretch(relativePos, halfSize, glass.cornerRadius, glass.scrollVelocity.x, 0.35);
+    float glassSdf = sdSquashStretch(relativePos, halfSize, glass.cornerRadius, glass.scrollVelocity.x, 0.45);
 
     // Check if SDF effects are enabled (non-zero size)
     bool sdfEnabled = sdf1.size.y > 0.0 || sdf2.size.y > 0.0;

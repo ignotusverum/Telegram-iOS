@@ -150,7 +150,7 @@ public final class LiquidLensView: UIView {
                 self.lensView = instance as? UIView
             }
         } else if enableCustomLiquidGlass {
-            let customLens = LegacyLiquidLensView(frame: .zero)
+            let customLens = LegacyLiquidLensView(frame: .zero, restingBackgroundView: restingBackgroundView)
             self.lensView = customLens
         }
 
@@ -158,17 +158,15 @@ public final class LiquidLensView: UIView {
             self.backgroundContainer.layer.zPosition = 1
             lensView.layer.zPosition = 10.0
 
-            self.liftedContainerView.addSubview(self.restingBackgroundView)
-
-//            self.containerView.addSubview(self.liftedContainerView)
+            self.containerView.addSubview(self.liftedContainerView)
             self.containerView.addSubview(lensView)
             self.containerView.addSubview(self.contentView)
 
             if let customLens = lensView as? LegacyLiquidLensView {
                 customLens.liftedContainerView = self.backgroundContainer.contentView
                 customLens.liftedContentView = self.liftedContainerView
-                customLens.warpsContentBelow = true
             } else {
+                self.liftedContainerView.addSubview(self.restingBackgroundView)
                 lensView.perform(NSSelectorFromString("setLiftedContainerView:"), with: self.backgroundContainer.contentView)
                 lensView.perform(NSSelectorFromString("setLiftedContentView:"), with: self.liftedContainerView)
                 lensView.perform(NSSelectorFromString("setOverridePunchoutView:"), with: self.contentView)
@@ -266,14 +264,9 @@ public final class LiquidLensView: UIView {
         let transition: ComponentTransition = animated ? .easeInOut(duration: 0.3) : .immediate
 
         if let customLens = lensView as? LegacyLiquidLensView {
-            // Activate on first use to set up mask and metal rendering
             customLens.activate()
-
-            // Set baseFrame - LegacyLiquidLensView handles all animation internally
-            // via spring physics and display link (no UIView animation here)
             customLens.baseFrame = params.baseFrame
 
-            // Trigger lift state change if needed
             if previousParams?.isLifted != params.isLifted {
                 customLens.setLifted(params.isLifted, animated: !transition.animation.isImmediate, alongsideAnimations: nil, completion: nil)
             }
@@ -394,12 +387,9 @@ public final class LiquidLensView: UIView {
             }
         }
 
-        transition.setFrame(view: self.restingBackgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
         self.restingBackgroundView.update(isDark: params.isDark)
-        // Only show restingBackgroundView for native lens, custom lens handles it internally
-        if self.lensView is LegacyLiquidLensView {
-            self.restingBackgroundView.isHidden = true
-        } else {
+        if !(self.lensView is LegacyLiquidLensView) {
+            transition.setFrame(view: self.restingBackgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
             self.restingBackgroundView.isHidden = false
             transition.setAlpha(view: self.restingBackgroundView, alpha: params.isLifted ? 0.0 : 1.0)
         }
