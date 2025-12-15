@@ -30,10 +30,11 @@ public final class LegacyLiquidLensView: UIView {
         public var vDeformHeightFactor: CGFloat = 0.55
 
         public var refractionStrength: Float = 8
-        public var specularIntensity: Float = 0.35
+        public var specularIntensity: Float = 0
         public var refractionZonePercent: Float = 0.35
-        public var edgeIntensity: Float = 0.7
-        public var verticalEdgeRefractionScale: Float = 1
+        public var edgeIntensity: Float = 0.5
+        public var refractionScaleX: Float = 1.0
+        public var refractionScaleY: Float = 0.5
         public var capturePadding: CGFloat = 60.0
 
         public var shadowOpacity: Float = 0.2
@@ -400,7 +401,8 @@ public final class LegacyLiquidLensView: UIView {
         u.specularIntensity = config.specularIntensity
         u.refractionZonePercent = config.refractionZonePercent
         u.edgeIntensity = config.edgeIntensity
-        u.verticalEdgeRefractionScale = config.verticalEdgeRefractionScale
+        u.refractionScaleX = config.refractionScaleX
+        u.refractionScaleY = config.refractionScaleY
         u.scrollVelocity = wobbleAnimator.normalizedVelocity
         u.time = Float(CACurrentMediaTime() - startTime)
         renderer.glassUniforms = u

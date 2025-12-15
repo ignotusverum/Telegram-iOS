@@ -28,13 +28,13 @@ struct LegacyGlassUniforms {
     var glassSize: SIMD2<Float> = .zero
     var cornerRadius: Float = 0
     var refractionStrength: Float = 6
-    var specularIntensity: Float = 0.4
+    var specularIntensity: Float = 0.2
     var refractionZonePercent: Float = 0.4
     var scrollVelocity: SIMD2<Float> = .zero
     var time: Float = 0
     var edgeIntensity: Float = 0.8
-    var verticalEdgeRefractionScale: Float = 1.0
-    var _padding: Float = 0
+    var refractionScaleX: Float = 1.0
+    var refractionScaleY: Float = 0.5
 }
 
 // EXACTLY matches SdfUniforms in original shader
