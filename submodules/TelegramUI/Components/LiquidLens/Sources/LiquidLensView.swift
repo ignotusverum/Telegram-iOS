@@ -167,10 +167,7 @@ public final class LiquidLensView: UIView {
             if let customLens = lensView as? LegacyLiquidLensView {
                 customLens.liftedContainerView = self.backgroundContainer.contentView
                 customLens.liftedContentView = self.liftedContainerView
-                customLens.liftedContentMode = 1
-                customLens.style = 1
                 customLens.warpsContentBelow = true
-                customLens.restingBackgroundColor = UIColor(white: 0.0, alpha: 0.1)
             } else {
                 lensView.perform(NSSelectorFromString("setLiftedContainerView:"), with: self.backgroundContainer.contentView)
                 lensView.perform(NSSelectorFromString("setLiftedContentView:"), with: self.liftedContainerView)
