@@ -49,7 +49,6 @@ namespace GlassEffects {
     constant float glassRefractiveIndex = 1.5;
     constant float proximityEasing = 0.6;
     constant float incidentAngleMultiplier = 1.4;
-    constant float refractionZonePercent = 0.35;
     constant float refractionMultiplier = 12.0;
     constant float paddingPercent = 0.08;
 

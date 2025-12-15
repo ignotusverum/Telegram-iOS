@@ -22,15 +22,14 @@ private func metalLibrary(device: MTLDevice) -> MTLLibrary? {
     return library
 }
 
-// EXACTLY matches GlassUniforms in original shader
 struct LegacyGlassUniforms {
     var viewSize: SIMD2<Float> = .zero
     var glassOrigin: SIMD2<Float> = .zero
     var glassSize: SIMD2<Float> = .zero
     var cornerRadius: Float = 0
-    var refractionStrength: Float = 0.015
+    var refractionStrength: Float = 6
     var specularIntensity: Float = 0.4
-    var refractionZonePercent: Float = 0.40
+    var refractionZonePercent: Float = 0.4
     var scrollVelocity: SIMD2<Float> = .zero
     var time: Float = 0
     var edgeIntensity: Float = 0.8

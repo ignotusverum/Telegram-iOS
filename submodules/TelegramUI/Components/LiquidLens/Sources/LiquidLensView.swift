@@ -140,11 +140,8 @@ public final class LiquidLensView: UIView {
         self.backgroundContainer.contentView.addSubview(self.backgroundView)
         self.backgroundView.contentView.addSubview(self.containerView)
         self.containerView.isUserInteractionEnabled = false
-        
-        if enableCustomLiquidGlass {
-            let customLens = LegacyLiquidLensView(frame: .zero)
-            self.lensView = customLens
-        } else if #available(iOS 26.0, *) {
+
+        if #available(iOS 26.0, *) {
             if let viewClass = NSClassFromString("_UILiquidLensView") as AnyObject as? NSObjectProtocol {
                 let allocSelector = NSSelectorFromString("alloc")
                 let initSelector = NSSelectorFromString("initWithRestingBackground:")
@@ -152,6 +149,9 @@ public final class LiquidLensView: UIView {
                 let instance = objcAlloc.perform(initSelector, with: UIView()).takeUnretainedValue()
                 self.lensView = instance as? UIView
             }
+        } else if enableCustomLiquidGlass {
+            let customLens = LegacyLiquidLensView(frame: .zero)
+            self.lensView = customLens
         }
 
         if let lensView = self.lensView {
