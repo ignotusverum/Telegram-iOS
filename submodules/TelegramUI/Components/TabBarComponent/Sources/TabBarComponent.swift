@@ -437,7 +437,8 @@ public final class TabBarComponent: Component {
                     itemTransition.setFrame(view: itemComponentView, frame: itemFrame)
                     itemTransition.setPosition(view: selectedItemComponentView, position: itemFrame.center)
                     itemTransition.setBounds(view: selectedItemComponentView, bounds: CGRect(origin: CGPoint(), size: itemFrame.size))
-                    itemTransition.setScale(view: selectedItemComponentView, scale: self.selectionGestureState != nil ? 1.15 : 1.0)
+                    let liftedScale: CGFloat = self.liquidLensView.usesCustomLiquidGlass ? 1.0 : 1.15
+                    itemTransition.setScale(view: selectedItemComponentView, scale: self.selectionGestureState != nil ? liftedScale : 1.0)
                     
                     if let previousComponent, previousComponent.selectedId != item.id, isItemSelected {
                         itemComponentView.playSelectionAnimation()

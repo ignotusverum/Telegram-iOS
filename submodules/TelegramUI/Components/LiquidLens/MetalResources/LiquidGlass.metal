@@ -19,6 +19,8 @@ struct GlassUniforms {
     float  edgeIntensity;
     float  refractionScaleX;
     float  refractionScaleY;
+    float  chromaticScaleX;
+    float  chromaticScaleY;
 };
 
 struct SdfUniforms {
@@ -343,7 +345,9 @@ fragment float4 liquidGlassTabBarFragment(
     );
 
     float chromaticProximity = smoothstep(0.5, 1.0, proximity);
-    float chromatic = chromaticProximity * kChromaticStrength;
+    float chromaticXScale = mix(1.0, glass.chromaticScaleX, xEdgeFactor);
+    float chromaticYScale = mix(1.0, glass.chromaticScaleY, yEdgeFactor);
+    float chromatic = chromaticProximity * kChromaticStrength * chromaticXScale * chromaticYScale;
 
     float smear = easedProximity * kSmearStrength;
     float3 color = sampleWithChromaticAberration(

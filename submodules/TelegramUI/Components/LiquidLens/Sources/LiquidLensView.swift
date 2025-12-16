@@ -108,6 +108,10 @@ public final class LiquidLensView: UIView {
         return self.liftedContainerView
     }
 
+    public var usesCustomLiquidGlass: Bool {
+        return self.lensView is LegacyLiquidLensView
+    }
+
     private var params: Params?
     private var appliedLensParams: LensParams?
     private var isApplyingLensParams: Bool = false

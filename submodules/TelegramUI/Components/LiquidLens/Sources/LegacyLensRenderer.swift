@@ -35,6 +35,8 @@ struct LegacyGlassUniforms {
     var edgeIntensity: Float = 0.8
     var refractionScaleX: Float = 1.0
     var refractionScaleY: Float = 0.5
+    var chromaticScaleX: Float = 1.0
+    var chromaticScaleY: Float = 0.25
 }
 
 // EXACTLY matches SdfUniforms in original shader
