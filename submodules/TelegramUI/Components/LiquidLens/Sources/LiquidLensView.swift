@@ -86,8 +86,11 @@ public final class LiquidLensView: UIView {
         }
     }
 
+    public static var enableSolidColorBackdrop: Bool = true
+
     private let containerView: UIView
     private let backgroundContainerContainer: UIView
+    private var solidColorBackdropView: UIView?
     private let backgroundContainer: GlassBackgroundContainerView
     private let backgroundView: GlassBackgroundView
     private var lensView: UIView?
@@ -99,6 +102,7 @@ public final class LiquidLensView: UIView {
     private var legacyContentMaskView: UIView?
     private var legacyContentMaskBlobView: UIImageView?
     private var legacyLiftedContentBlobMaskView: UIImageView?
+    private var liftedContentMaskView: UIView?
 
     public var selectedContentView: UIView {
         return self.liftedContainerView
@@ -133,7 +137,14 @@ public final class LiquidLensView: UIView {
         self.restingBackgroundView = RestingBackgroundView()
 
         super.init(frame: frame)
-        
+
+        if LiquidLensView.enableSolidColorBackdrop {
+            let solidView = UIView()
+            solidView.backgroundColor = UIColor(white: 0.5, alpha: 1.0)
+            solidView.clipsToBounds = true
+            self.solidColorBackdropView = solidView
+            self.backgroundContainerContainer.addSubview(solidView)
+        }
         self.backgroundContainerContainer.addSubview(self.backgroundContainer)
         self.addSubview(self.backgroundContainerContainer)
         
@@ -158,13 +169,19 @@ public final class LiquidLensView: UIView {
             self.backgroundContainer.layer.zPosition = 1
             lensView.layer.zPosition = 10.0
 
-            self.containerView.addSubview(self.liftedContainerView)
-            self.containerView.addSubview(lensView)
-            self.containerView.addSubview(self.contentView)
+            self.containerView.addSubview(self.contentView)          // Black icons (bottom, visible everywhere)
+            self.containerView.addSubview(self.liftedContainerView)  // Blue icons (masked to lens shape)
+            self.containerView.addSubview(lensView)                   // Glass effect on top
 
             if let customLens = lensView as? LegacyLiquidLensView {
                 customLens.liftedContainerView = self.backgroundContainer.contentView
                 customLens.liftedContentView = self.liftedContainerView
+
+                // Create mask for lifted content - clips blue icons to lens shape
+                let maskView = UIView()
+                maskView.backgroundColor = .white
+                self.liftedContainerView.mask = maskView
+                self.liftedContentMaskView = maskView
             } else {
                 self.liftedContainerView.addSubview(self.restingBackgroundView)
                 lensView.perform(NSSelectorFromString("setLiftedContainerView:"), with: self.backgroundContainer.contentView)
@@ -341,6 +358,12 @@ public final class LiquidLensView: UIView {
             legacyContentMaskBlobView.frame = effectiveLensFrame
             legacyLiftedContentBlobMaskView.frame = effectiveLensFrame
         }
+
+        // Update liftedContentMaskView to follow lens (clips blue icons to pill shape)
+        if let maskView = self.liftedContentMaskView {
+            maskView.frame = lensView.frame
+            maskView.layer.cornerRadius = lensView.frame.height / 2
+        }
     }
 
     private func update(params: Params, transition: ComponentTransition) {
@@ -352,11 +375,16 @@ public final class LiquidLensView: UIView {
         transition.setFrame(view: self.containerView, frame: CGRect(origin: CGPoint(), size: params.size))
         transition.setFrame(view: self.backgroundContainerContainer, frame: CGRect(origin: CGPoint(), size: params.size))
 
+        if let solidView = self.solidColorBackdropView {
+            solidView.backgroundColor = UIColor(white: params.isDark ? 0.15 : 0.85, alpha: 1)
+            solidView.layer.cornerRadius = params.size.height * 0.5
+            transition.setFrame(view: solidView, frame: CGRect(origin: CGPoint(), size: params.size))
+        }
         transition.setFrame(view: self.backgroundContainer, frame: CGRect(origin: CGPoint(), size: params.size))
         self.backgroundContainer.update(size: params.size, isDark: params.isDark, transition: transition)
 
         transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
-        self.backgroundView.update(size: params.size, cornerRadius: params.size.height * 0.5, isDark: params.isDark, tintColor: GlassBackgroundView.TintColor.init(kind: .panel, color: UIColor(white: params.isDark ? 0.0 : 1.0, alpha: 0.6)), isInteractive: true, transition: transition)
+        self.backgroundView.update(size: params.size, cornerRadius: params.size.height * 0.5, isDark: params.isDark, tintColor: GlassBackgroundView.TintColor.init(kind: .panel, color: UIColor(white: params.isDark ? 0.0 : 1.0, alpha: 0.9)), isInteractive: true, transition: transition)
 
         transition.setFrame(view: self.contentView, frame: CGRect(origin: CGPoint(), size: params.size))
         transition.setFrame(view: self.liftedContainerView, frame: CGRect(origin: CGPoint(), size: params.size))
@@ -385,6 +413,13 @@ public final class LiquidLensView: UIView {
                 legacySelectionView.tintColor = UIColor(white: params.isDark ? 1.0 : 0.0, alpha: params.isDark ? 0.1 : 0.075)
                 transition.setFrame(view: legacySelectionView, frame: effectiveLensFrame)
             }
+        }
+
+        // Update liftedContentMaskView for initial frame (display link updates in real-time)
+        if let maskView = self.liftedContentMaskView, let _ = self.lensView {
+            let maskFrame = baseLensFrame.insetBy(dx: params.isLifted ? -4.0 : 4.0, dy: params.isLifted ? -4.0 : 4.0)
+            transition.setFrame(view: maskView, frame: maskFrame)
+            maskView.layer.cornerRadius = maskFrame.height / 2
         }
 
         self.restingBackgroundView.update(isDark: params.isDark)

@@ -144,6 +144,7 @@ public final class LegacyLiquidLensView: UIView {
         let container = UIView()
         container.clipsToBounds = false
         container.isUserInteractionEnabled = false
+        container.layer.zPosition = 10
         addSubview(container)
         metalContainerView = container
 
@@ -444,13 +445,17 @@ public final class LegacyLiquidLensView: UIView {
         captureRectInWindow = containerInWindow.insetBy(dx: -config.capturePadding, dy: -config.capturePadding)
         captureRect = CGRect(origin: .zero, size: captureRectInWindow.size)
 
-        let wasHidden = isHidden
-        let contentWasHidden = liftedContentView?.isHidden ?? true
-        isHidden = true
-        liftedContentView?.isHidden = true
+        // Hide Metal container and resting background - keep liftedContentView VISIBLE for glass effect
+        let metalWasHidden = metalContainerView?.isHidden ?? true
+        let restingWasHidden = restingBackgroundView.isHidden
+        let savedMask = liftedContentView?.mask  // Save mask so all blue icons are captured
+        metalContainerView?.isHidden = true
+        restingBackgroundView.isHidden = true
+        liftedContentView?.mask = nil  // Remove mask during capture to capture ALL blue icons
         defer {
-            isHidden = wasHidden
-            liftedContentView?.isHidden = contentWasHidden
+            metalContainerView?.isHidden = metalWasHidden
+            restingBackgroundView.isHidden = restingWasHidden
+            liftedContentView?.mask = savedMask  // Restore mask
         }
 
         texturePool.lockForCPU()
