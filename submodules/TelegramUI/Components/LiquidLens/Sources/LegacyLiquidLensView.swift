@@ -329,6 +329,8 @@ public final class LegacyLiquidLensView: UIView {
         wobbleAnimator.release()
         wobbleAnimator.triggerDrop()
         let currentHDeform = lastCapturedHDeform
+        liftAnimator.stiffness = 600.0
+        liftAnimator.damping = 22.0
         liftAnimator.setValue(config.collapsedScale, animated: animated)
         fillScaleAnimator.target = 1.0
         fillAlphaAnimator.target = 1.0
