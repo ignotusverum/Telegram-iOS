@@ -294,26 +294,19 @@ public final class LiquidLensView: UIView {
             let isPositionChange = abs(previousX - params.baseFrame.midX) > 1.0
             let wasPreviouslyLifted = previousParams?.isLifted ?? false
 
-            print("[LiquidLensView.updateLens] previousX=\(previousX), newX=\(params.baseFrame.midX), isPositionChange=\(isPositionChange), wasPreviouslyLifted=\(wasPreviouslyLifted), isLifted=\(params.isLifted)")
-
             // Tap scenario: position changed while STARTING a new lift (tap on different tab)
             if isPositionChange && !wasPreviouslyLifted && params.isLifted {
-                print("[LiquidLensView.updateLens] >>> TRANSITION PATH - calling transitionToFrame (mask handled by LegacyLiquidLensView)")
                 // No mask hiding - LegacyLiquidLensView handles mask position via updateFrameFromScale()
                 customLens.transitionToFrame(params.baseFrame, animated: !transition.animation.isImmediate, delay: 0)
             } else if customLens.isTransitioning {
                 // If position changes during transition, it's a drag not a tap - cancel transition
                 if isPositionChange && params.isLifted {
-                    print("[LiquidLensView.updateLens] >>> TRANSITIONING but position changed (DRAG detected) - cancelling transition")
                     customLens.cancelTransition()
                     // Continue with normal drag behavior below - mask position handled by LegacyLiquidLensView
                     customLens.baseFrame = params.baseFrame
-                } else {
-                    // Ignore simple lift state changes while transitioning
-                    print("[LiquidLensView.updateLens] >>> TRANSITIONING - ignoring lift state change")
                 }
+                // else: Ignore simple lift state changes while transitioning
             } else {
-                print("[LiquidLensView.updateLens] >>> NORMAL PATH - setting baseFrame directly")
                 // Normal behavior (drag, simple lift/collapse)
                 customLens.baseFrame = params.baseFrame
                 if previousParams?.isLifted != params.isLifted {
@@ -386,7 +379,6 @@ public final class LiquidLensView: UIView {
 
         // For custom lens, mask is handled by LegacyLiquidLensView.updateFrameFromScale()
         if lensView is LegacyLiquidLensView {
-            print("[LiquidLensView.updateLiftedLensPosition] custom lens - skipping mask update (handled by LegacyLiquidLensView)")
             return
         }
 
@@ -462,7 +454,6 @@ public final class LiquidLensView: UIView {
         // Skip for custom lens - LegacyLiquidLensView handles mask position via updateFrameFromScale()
         if let maskView = self.liftedContentMaskView, let lensView = self.lensView, !(lensView is LegacyLiquidLensView) {
             let maskFrame = baseLensFrame.insetBy(dx: params.isLifted ? -4.0 : 4.0, dy: params.isLifted ? -4.0 : 4.0)
-            print("[LiquidLensView.update(params:)] native lens - updating mask frame to \(maskFrame)")
             transition.setFrame(view: maskView, frame: maskFrame)
             maskView.layer.cornerRadius = maskFrame.height / 2
         }

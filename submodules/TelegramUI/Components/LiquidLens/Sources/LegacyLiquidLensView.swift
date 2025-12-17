@@ -250,7 +250,6 @@ public final class LegacyLiquidLensView: UIView {
     public func transitionToFrame(_ newFrame: CGRect, animated: Bool, delay: TimeInterval = 0.0) {
         // If already transitioning, update target position to new frame
         if isTransitioning {
-            print("[LegacyLiquidLensView.transitionToFrame] already transitioning, updating target to \(newFrame.midX)")
             transitionTargetFrame = newFrame
             baseFrame = newFrame
             positionAnimator.setPosition(CGPoint(x: newFrame.midX, y: newFrame.midY), animated: animated)
@@ -259,7 +258,6 @@ public final class LegacyLiquidLensView: UIView {
 
         // Save current position BEFORE changing anything
         let currentCenter = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
-        print("[LegacyLiquidLensView.transitionToFrame] START - currentCenter=\(currentCenter), newFrame.midX=\(newFrame.midX), delay=\(delay)")
 
         isTransitioning = true
         transitionTargetFrame = newFrame
@@ -272,8 +270,6 @@ public final class LegacyLiquidLensView: UIView {
 
         let startAnimation = { [weak self] in
             guard let self else { return }
-
-            print("[LegacyLiquidLensView.transitionToFrame] Starting animation after delay")
 
             // Set target position (start moving)
             self.positionAnimator.setPosition(CGPoint(x: newFrame.midX, y: newFrame.midY), animated: animated)
@@ -308,7 +304,6 @@ public final class LegacyLiquidLensView: UIView {
     /// Cancel ongoing transition (e.g., when drag is detected instead of tap)
     public func cancelTransition() {
         guard isTransitioning else { return }
-        print("[LegacyLiquidLensView.cancelTransition] Cancelling transition")
 
         isTransitioning = false
 
@@ -362,11 +357,8 @@ public final class LegacyLiquidLensView: UIView {
             let positionSettled = positionAnimator.isSettled
             let fullyExpanded = liftAnimator.current >= config.expandedScale * 0.95
 
-            print("[LegacyLiquidLensView.update] TRANSITIONING - positionAnimator.current=\(positionAnimator.current), target=\(positionAnimator.target), isSettled=\(positionSettled), fullyExpanded=\(fullyExpanded)")
-
             if positionSettled && fullyExpanded && isLifted {
                 // Position has settled - end transition and trigger collapse immediately
-                print("[LegacyLiquidLensView.update] >>> POSITION SETTLED - ending transition, triggering collapse")
 
                 // End transition so future lift state changes work
                 isTransitioning = false
@@ -437,10 +429,8 @@ public final class LegacyLiquidLensView: UIView {
         let newCenter: CGPoint
         if isTransitioning && !positionAnimator.isSettled {
             newCenter = positionAnimator.current
-            print("[LegacyLiquidLensView.updateFrameFromScale] TRANSITIONING - using positionAnimator.current=\(newCenter)")
         } else {
             newCenter = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
-            print("[LegacyLiquidLensView.updateFrameFromScale] NOT transitioning or settled - using baseFrame.mid=\(newCenter), isTransitioning=\(isTransitioning), isSettled=\(positionAnimator.isSettled)")
         }
 
         if newBounds != cachedBounds {
@@ -450,7 +440,6 @@ public final class LegacyLiquidLensView: UIView {
         if newCenter != cachedCenter {
             cachedCenter = newCenter
             center = newCenter
-            print("[LegacyLiquidLensView.updateFrameFromScale] CENTER CHANGED to \(newCenter)")
         }
 
         // Update mask to follow lens
@@ -458,7 +447,6 @@ public final class LegacyLiquidLensView: UIView {
             let maskFrame = frame.insetBy(dx: 4.0, dy: 4.0)
             maskView.frame = maskFrame
             maskView.layer.cornerRadius = maskFrame.height / 2
-            print("[LegacyLiquidLensView.updateFrameFromScale] MASK updated to \(maskFrame)")
         }
     }
 
