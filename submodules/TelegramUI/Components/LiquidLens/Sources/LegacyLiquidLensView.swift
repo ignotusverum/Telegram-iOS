@@ -59,7 +59,7 @@ public final class LegacyLiquidLensView: UIView {
         didSet {
             guard baseFrame != oldValue else { return }
 
-            if isLifted {
+            if isLifted && !isTransitioning {
                 let deltaX = baseFrame.midX - oldValue.midX
                 let deltaY = baseFrame.midY - oldValue.midY
                 let now = CACurrentMediaTime()
@@ -69,9 +69,12 @@ public final class LegacyLiquidLensView: UIView {
                 wobbleAnimator.trackVelocity(CGPoint(x: velocityX, y: velocityY))
             }
 
-            updateFrameFromScale()
-            updateVisibility()
-            updateRestingFillFrame()
+            // Skip immediate updates during transition - let display link handle position animation
+            if !isTransitioning {
+                updateFrameFromScale()
+                updateVisibility()
+                updateRestingFillFrame()
+            }
         }
     }
 
@@ -85,6 +88,12 @@ public final class LegacyLiquidLensView: UIView {
     private let fillScaleAnimator = LegacyScaleAnimator()
     private let fillDeformAnimator = LegacyScaleAnimator()
     private let wobbleAnimator = LegacyWobbleAnimator()
+    private let positionAnimator = LegacySpringAnimator()
+
+    // Transition state for tap-to-move animation
+    var isTransitioning = false
+    private var transitionTargetFrame: CGRect = .zero
+    private var transitionCompletion: (() -> Void)?
 
     private var hasValidBackdrop = false
     private var lastCapturedHDeform: CGFloat = 0
@@ -138,6 +147,12 @@ public final class LegacyLiquidLensView: UIView {
         setupMetal()
         applyAnimatorConfig()
         resetAnimatorValues()
+
+        // Configure position animator for smooth tap transitions
+        positionAnimator.stiffness = 150.0
+        positionAnimator.damping = 15.0
+        positionAnimator.mass = 1.0
+        
     }
 
     private func setupMetal() {
@@ -227,6 +242,84 @@ public final class LegacyLiquidLensView: UIView {
         }
     }
 
+    /// Animate from current position to new frame: expand + move simultaneously, then collapse
+    /// - Parameters:
+    ///   - delay: Delay before starting the animation (to sync with icon tinting)
+    public func transitionToFrame(_ newFrame: CGRect, animated: Bool, delay: TimeInterval = 0.0, completion: (() -> Void)?) {
+        // If already transitioning, update target position to new frame
+        if isTransitioning {
+            print("[LegacyLiquidLensView.transitionToFrame] already transitioning, updating target to \(newFrame.midX)")
+            transitionTargetFrame = newFrame
+            baseFrame = newFrame
+            positionAnimator.setPosition(CGPoint(x: newFrame.midX, y: newFrame.midY), animated: animated)
+            transitionCompletion = completion
+            return
+        }
+
+        // Save current position BEFORE changing anything
+        let currentCenter = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
+        print("[LegacyLiquidLensView.transitionToFrame] START - currentCenter=\(currentCenter), newFrame.midX=\(newFrame.midX), delay=\(delay)")
+
+        isTransitioning = true
+        transitionTargetFrame = newFrame
+        transitionCompletion = completion
+
+        // Initialize position animator with current position (keep it here during delay)
+        positionAnimator.setPosition(currentCenter, animated: false)
+
+        // Update baseFrame for size calculations (didSet skips updates during transition)
+        baseFrame = newFrame
+
+        let startAnimation = { [weak self] in
+            guard let self else { return }
+
+            print("[LegacyLiquidLensView.transitionToFrame] Starting animation after delay")
+
+            // Set target position (start moving)
+            self.positionAnimator.setPosition(CGPoint(x: newFrame.midX, y: newFrame.midY), animated: animated)
+
+            // Start expand animation simultaneously
+            self.isLifted = true
+            self.expandAnimation(animated: animated)
+
+            // Manually trigger initial update since didSet was skipped
+            self.updateFrameFromScale()
+            self.updateVisibility()
+            self.updateRestingFillFrame()
+
+            self.startDisplayLink()
+        }
+
+        if delay > 0 {
+            // Keep lens at current position during delay
+            updateFrameFromScale()
+            updateVisibility()
+            updateRestingFillFrame()
+            startDisplayLink()
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                startAnimation()
+            }
+        } else {
+            startAnimation()
+        }
+    }
+
+    /// Cancel ongoing transition (e.g., when drag is detected instead of tap)
+    public func cancelTransition() {
+        guard isTransitioning else { return }
+        print("[LegacyLiquidLensView.cancelTransition] Cancelling transition")
+
+        isTransitioning = false
+        transitionCompletion = nil
+
+        // Reset position animator to follow current baseFrame immediately
+        positionAnimator.setPosition(CGPoint(x: baseFrame.midX, y: baseFrame.midY), animated: false)
+
+        // Keep lens expanded (user is dragging)
+        // Don't change isLifted - let normal drag behavior handle it
+    }
+
     private func expandAnimation(animated: Bool) {
         wobbleAnimator.reset()
         fillAlphaAnimator.setValue(0, animated: false)
@@ -262,9 +355,36 @@ public final class LegacyLiquidLensView: UIView {
         lastFrameTime = frameTimestamp
 
         stepAnimators()
+        positionAnimator.step()
         wobbleAnimator.update(dt: CGFloat(dt))
 
-        let settled = !isAnimating && wobbleAnimator.isSettled
+        // Check if transitioning and ready to collapse
+        if isTransitioning {
+            let positionSettled = positionAnimator.isSettled
+            let fullyExpanded = liftAnimator.current >= config.expandedScale * 0.95
+
+            print("[LegacyLiquidLensView.update] TRANSITIONING - positionAnimator.current=\(positionAnimator.current), target=\(positionAnimator.target), isSettled=\(positionSettled), fullyExpanded=\(fullyExpanded)")
+
+            if positionSettled && fullyExpanded && isLifted {
+                // Position has settled - end transition and trigger collapse immediately
+                print("[LegacyLiquidLensView.update] >>> POSITION SETTLED - ending transition, triggering collapse")
+
+                // End transition so future lift state changes work
+                isTransitioning = false
+
+                // Move transition completion to pendingCompletion so it fires after collapse
+                if let completion = transitionCompletion {
+                    transitionCompletion = nil
+                    pendingCompletion = { _ in completion() }
+                }
+
+                // Trigger collapse immediately
+                isLifted = false
+                collapseAnimation(animated: true)
+            }
+        }
+
+        let settled = !isAnimating && wobbleAnimator.isSettled && positionAnimator.isSettled
         if settled && !isLifted {
             checkCompletion()
             stopDisplayLink()
@@ -319,7 +439,16 @@ public final class LegacyLiquidLensView: UIView {
                 height: baseFrame.height + inset * 2
             )
         )
-        let newCenter = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
+
+        // Use animated position during transition
+        let newCenter: CGPoint
+        if isTransitioning && !positionAnimator.isSettled {
+            newCenter = positionAnimator.current
+            print("[LegacyLiquidLensView.updateFrameFromScale] TRANSITIONING - using positionAnimator.current=\(newCenter)")
+        } else {
+            newCenter = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
+            print("[LegacyLiquidLensView.updateFrameFromScale] NOT transitioning or settled - using baseFrame.mid=\(newCenter), isTransitioning=\(isTransitioning), isSettled=\(positionAnimator.isSettled)")
+        }
 
         if newBounds != cachedBounds {
             cachedBounds = newBounds
@@ -328,6 +457,7 @@ public final class LegacyLiquidLensView: UIView {
         if newCenter != cachedCenter {
             cachedCenter = newCenter
             center = newCenter
+            print("[LegacyLiquidLensView.updateFrameFromScale] CENTER CHANGED to \(newCenter)")
         }
     }
 
@@ -434,9 +564,13 @@ public final class LegacyLiquidLensView: UIView {
     }
 
     private func checkCompletion() {
-        guard !isAnimating, let completion = pendingCompletion else { return }
-        pendingCompletion = nil
-        completion(true)
+        guard !isAnimating else { return }
+
+        // Handle normal lift/collapse completion
+        if let completion = pendingCompletion {
+            pendingCompletion = nil
+            completion(true)
+        }
     }
 
     private func captureBackdrop() {
