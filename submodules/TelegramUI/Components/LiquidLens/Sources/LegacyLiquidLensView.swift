@@ -14,20 +14,22 @@ public final class LegacyLiquidLensView: UIView {
         public var collapsedInset: CGFloat = -4.0
         public var liftedInset: CGFloat = 8.0
 
-        public var liftStiffness: CGFloat = 500.0
-        public var liftDamping: CGFloat = 26.0
+        // Lighter, bouncier spring settings (like iOS 26)
+        public var liftStiffness: CGFloat = 250.0
+        public var liftDamping: CGFloat = 14.0
 
-        public var fillStiffness: CGFloat = 550.0
-        public var fillDamping: CGFloat = 30.0
+        public var fillStiffness: CGFloat = 280.0
+        public var fillDamping: CGFloat = 16.0
 
-        public var deformStiffness: CGFloat = 400.0
-        public var deformDamping: CGFloat = 22.0
+        public var deformStiffness: CGFloat = 200.0
+        public var deformDamping: CGFloat = 12.0
 
-        public var hDeformWidthFactor: CGFloat = 0.50
-        public var hDeformHeightFactor: CGFloat = 0.35
+        // Higher deform factors = more bendy/stretchy
+        public var hDeformWidthFactor: CGFloat = 0.70
+        public var hDeformHeightFactor: CGFloat = 0.50
 
-        public var vDeformWidthFactor: CGFloat = 0.40
-        public var vDeformHeightFactor: CGFloat = 0.55
+        public var vDeformWidthFactor: CGFloat = 0.55
+        public var vDeformHeightFactor: CGFloat = 0.70
 
         public var refractionStrength: Float = 8
         public var specularIntensity: Float = 0
@@ -148,10 +150,10 @@ public final class LegacyLiquidLensView: UIView {
         applyAnimatorConfig()
         resetAnimatorValues()
 
-        // Configure position animator for smooth tap transitions
-        positionAnimator.stiffness = 150.0
-        positionAnimator.damping = 15.0
-        positionAnimator.mass = 1.0
+        // Configure position animator for smooth tap transitions (lighter, jumpier like iOS 26)
+        positionAnimator.stiffness = 80.0
+        positionAnimator.damping = 8.0
+        positionAnimator.mass = 0.8
         
     }
 
@@ -463,33 +465,23 @@ public final class LegacyLiquidLensView: UIView {
     private func updateRestingFillFrame() {
         guard baseFrame.width > 0, (restingBackgroundView.alpha > 0 || !fillAlphaAnimator.isSettled) else { return }
 
-        let scale = fillScaleAnimator.current
-
-        let hDeform: CGFloat
-        if isLifted {
-            hDeform = wobbleAnimator.horizontalValue
-        } else {
-            hDeform = fillDeformAnimator.isSettled ? 0 : fillDeformAnimator.current
-        }
-
-        let hasOffset = abs(hDeform) > 0.001
+        // Apply wobble deformation to resting background (same as Metal lens)
+        let hDeform = wobbleAnimator.horizontalValue
+        let vDeform = wobbleAnimator.verticalValue
 
         let widthMult: CGFloat
         let heightMult: CGFloat
 
-        if hasOffset {
-            widthMult = 1.0 - hDeform * config.hDeformWidthFactor
-            heightMult = 1.0 + hDeform * config.hDeformHeightFactor
+        if abs(hDeform) > 0.001 || abs(vDeform) > 0.001 {
+            widthMult = 1.0 - hDeform * config.hDeformWidthFactor - abs(vDeform) * config.vDeformWidthFactor
+            heightMult = 1.0 + hDeform * config.hDeformHeightFactor + abs(vDeform) * config.vDeformHeightFactor
         } else {
             widthMult = 1.0
             heightMult = 1.0
         }
 
-        let baseWidth = baseFrame.width + config.collapsedInset * 2
-        let baseHeight = baseFrame.height + config.collapsedInset * 2
-
-        let width = baseWidth * scale * widthMult
-        let height = baseHeight * scale * heightMult
+        let width = bounds.width * widthMult
+        let height = bounds.height * heightMult
 
         let newFrame = CGRect(
             x: bounds.midX - width / 2,
