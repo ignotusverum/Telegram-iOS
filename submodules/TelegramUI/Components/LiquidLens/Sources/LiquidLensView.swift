@@ -186,6 +186,9 @@ public final class LiquidLensView: UIView {
                 maskView.backgroundColor = .white
                 self.liftedContainerView.mask = maskView
                 self.liftedContentMaskView = maskView
+
+                // Pass mask to LegacyLiquidLensView so it can update mask position during animations
+                customLens.liftedContentMaskView = maskView
             } else {
                 self.liftedContainerView.addSubview(self.restingBackgroundView)
                 lensView.perform(NSSelectorFromString("setLiftedContainerView:"), with: self.backgroundContainer.contentView)
@@ -295,28 +298,15 @@ public final class LiquidLensView: UIView {
 
             // Tap scenario: position changed while STARTING a new lift (tap on different tab)
             if isPositionChange && !wasPreviouslyLifted && params.isLifted {
-                print("[LiquidLensView.updateLens] >>> TRANSITION PATH - hiding mask, calling transitionToFrame")
-                // Hide mask during transition
-                self.liftedContentMaskView?.isHidden = true
-
-                customLens.transitionToFrame(params.baseFrame, animated: !transition.animation.isImmediate, delay: 0) { [weak self] in
-                    guard let self else { return }
-                    print("[LiquidLensView.updateLens] >>> TRANSITION COMPLETE - showing mask")
-                    // Show mask on completion - use lens frame directly to avoid any mismatch
-                    if let maskView = self.liftedContentMaskView, let customLens = self.lensView as? LegacyLiquidLensView {
-                        let maskFrame = customLens.frame.insetBy(dx: 4.0, dy: 4.0)
-                        maskView.frame = maskFrame
-                        maskView.layer.cornerRadius = maskFrame.height / 2
-                    }
-                    self.liftedContentMaskView?.isHidden = false
-                }
+                print("[LiquidLensView.updateLens] >>> TRANSITION PATH - calling transitionToFrame (mask handled by LegacyLiquidLensView)")
+                // No mask hiding - LegacyLiquidLensView handles mask position via updateFrameFromScale()
+                customLens.transitionToFrame(params.baseFrame, animated: !transition.animation.isImmediate, delay: 0)
             } else if customLens.isTransitioning {
                 // If position changes during transition, it's a drag not a tap - cancel transition
                 if isPositionChange && params.isLifted {
                     print("[LiquidLensView.updateLens] >>> TRANSITIONING but position changed (DRAG detected) - cancelling transition")
                     customLens.cancelTransition()
-                    self.liftedContentMaskView?.isHidden = false
-                    // Continue with normal drag behavior below
+                    // Continue with normal drag behavior below - mask position handled by LegacyLiquidLensView
                     customLens.baseFrame = params.baseFrame
                 } else {
                     // Ignore simple lift state changes while transitioning
@@ -394,14 +384,9 @@ public final class LiquidLensView: UIView {
             return
         }
 
-        // For custom lens during transition, position is handled internally by positionAnimator
+        // For custom lens, mask is handled by LegacyLiquidLensView.updateFrameFromScale()
         if lensView is LegacyLiquidLensView {
-            // Only update mask when visible (not during transition)
-            if let maskView = self.liftedContentMaskView, !maskView.isHidden {
-                print("[LiquidLensView.updateLiftedLensPosition] updating mask frame to \(lensView.frame.insetBy(dx: 4.0, dy: 4.0))")
-                maskView.frame = lensView.frame.insetBy(dx: 4.0, dy: 4.0)
-                maskView.layer.cornerRadius = maskView.frame.height / 2
-            }
+            print("[LiquidLensView.updateLiftedLensPosition] custom lens - skipping mask update (handled by LegacyLiquidLensView)")
             return
         }
 
@@ -474,16 +459,12 @@ public final class LiquidLensView: UIView {
         }
 
         // Update liftedContentMaskView for initial frame (display link updates in real-time)
-        // Skip if mask is hidden (during transition)
-        if let maskView = self.liftedContentMaskView, let _ = self.lensView {
-            if maskView.isHidden {
-                print("[LiquidLensView.update(params:)] mask is hidden, SKIPPING update")
-            } else {
-                let maskFrame = baseLensFrame.insetBy(dx: params.isLifted ? -4.0 : 4.0, dy: params.isLifted ? -4.0 : 4.0)
-                print("[LiquidLensView.update(params:)] updating mask frame to \(maskFrame)")
-                transition.setFrame(view: maskView, frame: maskFrame)
-                maskView.layer.cornerRadius = maskFrame.height / 2
-            }
+        // Skip for custom lens - LegacyLiquidLensView handles mask position via updateFrameFromScale()
+        if let maskView = self.liftedContentMaskView, let lensView = self.lensView, !(lensView is LegacyLiquidLensView) {
+            let maskFrame = baseLensFrame.insetBy(dx: params.isLifted ? -4.0 : 4.0, dy: params.isLifted ? -4.0 : 4.0)
+            print("[LiquidLensView.update(params:)] native lens - updating mask frame to \(maskFrame)")
+            transition.setFrame(view: maskView, frame: maskFrame)
+            maskView.layer.cornerRadius = maskFrame.height / 2
         }
 
         self.restingBackgroundView.update(isDark: params.isDark)
