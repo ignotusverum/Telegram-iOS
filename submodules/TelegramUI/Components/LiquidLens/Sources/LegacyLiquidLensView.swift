@@ -356,10 +356,12 @@ public final class LegacyLiquidLensView: UIView {
 
         // Check if transitioning and ready to collapse
         if isTransitioning {
-            let positionSettled = positionAnimator.isSettled
+            let displacement = hypot(positionAnimator.current.x - positionAnimator.target.x,
+                                     positionAnimator.current.y - positionAnimator.target.y)
+            let positionNearlySettled = displacement < 8.0
             let fullyExpanded = liftAnimator.current >= config.expandedScale * 0.95
 
-            if positionSettled && fullyExpanded && isLifted {
+            if positionNearlySettled && fullyExpanded && isLifted {
                 // Position has settled - end transition and trigger collapse immediately
 
                 // End transition so future lift state changes work
