@@ -50,7 +50,7 @@ namespace GlassEffects {
     constant float paddingPercent = 0.08;
 
     constant float smearPercent = 0.025;
-    constant float chromaticPercent = 0.1;
+    constant float chromaticPercent = 0.02;
     constant float smearSpacing = 0.5;
 
     constant float fresnelExponent = 2.5;

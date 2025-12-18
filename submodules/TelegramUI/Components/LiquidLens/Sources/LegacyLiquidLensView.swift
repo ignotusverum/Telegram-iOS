@@ -38,7 +38,7 @@ public final class LegacyLiquidLensView: UIView {
         public var refractionScaleX: Float = 1.0
         public var refractionScaleY: Float = 0.5
         public var chromaticScaleX: Float = 1.0
-        public var chromaticScaleY: Float = 0.25
+        public var chromaticScaleY: Float = 0.15
         public var capturePadding: CGFloat = 60.0
 
         public var shadowOpacity: Float = 0.2
