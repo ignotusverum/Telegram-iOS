@@ -229,8 +229,10 @@ public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
     
     override public func didLoad() {
         super.didLoad()
-        
+
+        // Add target for UISwitch
         (self.switchNode.view as? UISwitch)?.addTarget(self, action: #selector(self.switchValueChanged(_:)), for: .valueChanged)
+        // Note: Custom switch views (LiquidGlassSwitchView) handle value changes via SwitchNode.valueUpdated callback
         self.switchGestureNode.view.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.tapGesture(_:))))
     }
     
@@ -503,13 +505,20 @@ public class ItemListSwitchItemNode: ListViewItemNode, ItemListItemNode {
                             switchView.sizeToFit()
                         }
                         let switchSize = switchView.bounds.size
-                        
+
                         transition.updateFrame(node: strongSelf.switchNode, frame: CGRect(origin: CGPoint(x: params.width - params.rightInset - switchSize.width - 15.0, y: floor((contentSize.height - switchSize.height) / 2.0)), size: switchSize))
                         strongSelf.switchGestureNode.frame = strongSelf.switchNode.frame
                         if switchView.isOn != item.value {
                             switchView.setOn(item.value, animated: animated)
                         }
                         switchView.isUserInteractionEnabled = item.enableInteractiveChanges
+                    } else if let customSwitchView = strongSelf.switchNode.view as? UIControl {
+                        // Handle custom switch view (e.g., LiquidGlassSwitchView)
+                        let switchSize = customSwitchView.sizeThatFits(CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
+
+                        transition.updateFrame(node: strongSelf.switchNode, frame: CGRect(origin: CGPoint(x: params.width - params.rightInset - switchSize.width - 15.0, y: floor((contentSize.height - switchSize.height) / 2.0)), size: switchSize))
+                        strongSelf.switchGestureNode.frame = strongSelf.switchNode.frame
+                        customSwitchView.isUserInteractionEnabled = item.enableInteractiveChanges
                     }
                     strongSelf.switchGestureNode.isHidden = item.enableInteractiveChanges && item.enabled
                     

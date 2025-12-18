@@ -44,6 +44,7 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         // Hide original drawing
         backgroundColor = .clear
         isOpaque = false
+        clipsToBounds = false  // Allow expanded knob to overflow
 
         // Hide original knob
         knobView.isHidden = true
@@ -147,13 +148,13 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         super.layoutSubviews()
 
         let trackY = (bounds.height - Constants.trackHeight) / 2
-        let trackInset = Constants.thumbWidth / 2
+        let padding = Constants.thumbWidth / 2
 
-        // Track container spans the usable width
+        // Track container has same padding as knob so they align
         trackContainer.frame = CGRect(
-            x: trackInset,
+            x: padding,
             y: trackY,
-            width: bounds.width - trackInset * 2,
+            width: bounds.width - padding * 2,
             height: Constants.trackHeight
         )
         trackContainer.layer.cornerRadius = Constants.trackHeight / 2
@@ -187,26 +188,21 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         } else {
             normalizedValue = 0
         }
-        // Knob center moves from thumbWidth/2 to (bounds.width - thumbWidth/2)
-        let trackInset = Constants.thumbWidth / 2
-        return trackInset + (bounds.width - Constants.thumbWidth) * normalizedValue
+        // Knob center moves with padding so knob is fully visible at edges
+        let padding = Constants.thumbWidth / 2
+        let totalLength = bounds.width - padding * 2
+        return padding + totalLength * normalizedValue
     }
 
     private func updateTrackFill() {
         guard trackContainer.bounds.width > 0 else { return }
 
-        let knobCenterX: CGFloat
-        if isCurrentlyTracking {
-            // During tracking, use calculated position to avoid animation lag
-            knobCenterX = expectedKnobCenterX()
-        } else {
-            // When not tracking, follow the actual knob position
-            knobCenterX = knobView.center.x
-        }
+        // Always use calculated position to align with knob center
+        let knobCenterX = expectedKnobCenterX()
 
-        // Fill extends from track start to knob center
-        let trackInset = Constants.thumbWidth / 2
-        let fillWidth = knobCenterX - trackInset
+        // Fill extends from track start to knob center (relative to track container)
+        let padding = Constants.thumbWidth / 2
+        let fillWidth = knobCenterX - padding
 
         // Remove ALL animations and set frame immediately
         trackTintLayer.removeAllAnimations()
@@ -223,13 +219,8 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     }
 
     private func updateKnobPosition() {
-        if isCurrentlyTracking {
-            // During tracking, use calculated position to match fill exactly
-            glassKnobView.knobCenterX = expectedKnobCenterX()
-        } else {
-            // When not tracking, follow the actual knob position
-            glassKnobView.knobCenterX = knobView.center.x
-        }
+        // Always use calculated position to align with track edges
+        glassKnobView.knobCenterX = expectedKnobCenterX()
     }
 
     // MARK: - Value Changes
