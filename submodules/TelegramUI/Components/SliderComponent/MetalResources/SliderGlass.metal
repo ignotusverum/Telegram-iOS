@@ -21,6 +21,8 @@ struct GlassUniforms {
     float  refractionScaleY;
     float  chromaticScaleX;
     float  chromaticScaleY;
+    float  borderOuter;
+    float  borderInner;
 };
 
 struct SdfUniforms {
@@ -229,7 +231,7 @@ float3 applyUnselectedFills(float3 color, float2 pixelPos, constant TabUniforms 
     return color;
 }
 
-float3 calculateEdgeEffects(float glassSdf, float easedProximity, float intensity, float2 relativePos) {
+float3 calculateEdgeEffects(float glassSdf, float easedProximity, float intensity, float2 relativePos, float borderOuter, float borderInner) {
     if (intensity <= 0.0) return float3(0.0);
 
     float2 normDir = normalize(relativePos + 0.001);
@@ -245,7 +247,7 @@ float3 calculateEdgeEffects(float glassSdf, float easedProximity, float intensit
     float edgeMask = smoothstep(GlassEffects::edgeMaskWidth, 0.0, abs(glassSdf));
     effects += float3(1.0) * edgeMask * GlassEffects::edgeMaskIntensity * highlightMask;
 
-    float border = smoothstep(GlassEffects::borderOuter, 0.0, abs(glassSdf)) - smoothstep(GlassEffects::borderInner, 0.0, abs(glassSdf));
+    float border = smoothstep(borderOuter, 0.0, abs(glassSdf)) - smoothstep(borderInner, 0.0, abs(glassSdf));
     effects += float3(1.0) * border * GlassEffects::borderIntensity * highlightMask;
 
     float shadowEdge = smoothstep(GlassEffects::edgeMaskWidth, 0.0, abs(glassSdf));
@@ -356,7 +358,7 @@ fragment float4 liquidGlassTabBarFragment(
         glass.viewSize, chromatic, smear
     );
 
-    color += calculateEdgeEffects(glassSdf, easedProximity, glass.edgeIntensity, relativePos);
+    color += calculateEdgeEffects(glassSdf, easedProximity, glass.edgeIntensity, relativePos, glass.borderOuter, glass.borderInner);
 
     if (sdfEnabled) {
         color = applyUnselectedFills(color, pixelPos, tabs);

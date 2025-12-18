@@ -69,6 +69,12 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         // Setup display link for velocity tracking
         setupDisplayLink()
 
+        // Setup long press gesture for tap & hold expand (like LegacyLiquidLensView)
+        let longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        longPressGesture.minimumPressDuration = 0
+        longPressGesture.delegate = self
+        addGestureRecognizer(longPressGesture)
+
         // Setup interaction callbacks
         interactionBegan = { [weak self] in
             guard let self else { return }
@@ -84,6 +90,21 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
             self.glassKnobView.collapse()
             self.glassKnobView.releaseVelocity()
             self.onTrackingChanged?(false)
+        }
+    }
+
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            if !isCurrentlyTracking {
+                glassKnobView.expand()
+            }
+        case .ended, .cancelled:
+            if !isCurrentlyTracking {
+                glassKnobView.collapse()
+            }
+        default:
+            break
         }
     }
 
@@ -225,5 +246,13 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     func configureColors(trackBackground: UIColor, trackForeground: UIColor) {
         trackContainer.backgroundColor = trackBackground
         trackTintLayer.backgroundColor = trackForeground.cgColor
+    }
+}
+
+// MARK: - UIGestureRecognizerDelegate
+
+extension LiquidGlassSliderView: UIGestureRecognizerDelegate {
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
     }
 }

@@ -27,9 +27,9 @@ struct SliderGlassUniforms {
     var glassOrigin: SIMD2<Float> = .zero
     var glassSize: SIMD2<Float> = .zero
     var cornerRadius: Float = 0
-    var refractionStrength: Float = 6
-    var specularIntensity: Float = 0.2
-    var refractionZonePercent: Float = 0.4
+    var refractionStrength: Float = 15
+    var specularIntensity: Float = 1.2
+    var refractionZonePercent: Float = 0.9
     var scrollVelocity: SIMD2<Float> = .zero
     var time: Float = 0
     var edgeIntensity: Float = 0.8
@@ -37,6 +37,8 @@ struct SliderGlassUniforms {
     var refractionScaleY: Float = 0.5
     var chromaticScaleX: Float = 1.0
     var chromaticScaleY: Float = 0.25
+    var borderOuter: Float = 0
+    var borderInner: Float = 0
 }
 
 // EXACTLY matches SdfUniforms in shader

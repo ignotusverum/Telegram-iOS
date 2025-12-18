@@ -15,20 +15,23 @@ final class LiquidGlassKnobView: UIView {
         // Staggered visibility thresholds
         static let expandedThreshold: CGFloat = 1.01
         static let metalThreshold: CGFloat = 1.03
-        static let grayThreshold: CGFloat = 1.08
+        static let grayThreshold: CGFloat = 1.04
         // Rendering
         static let capturePadding: CGFloat = 40.0
-        static let refractionStrength: Float = 8.0
+        static let refractionStrength: Float = 10.0
         static let specularIntensity: Float = 0.2
-        static let refractionZonePercent: Float = 0.35
+        static let refractionZonePercent: Float = 0.45
         static let edgeIntensity: Float = 1.0
         // Deformation settings
-        static let deformStrength: CGFloat = 0.4
-        static let heightDeformRatio: CGFloat = 0.75
+        static let deformStrength: CGFloat = 0.35
+        static let heightDeformRatio: CGFloat = 0.45
         // Shadow
         static let shadowOpacity: Float = 0.2
         static let shadowRadius: CGFloat = 12
         static let shadowOffset: CGSize = CGSize(width: 0, height: 4)
+        // Border
+        static let borderOuter: Float = 0
+        static let borderInner: Float = 0
     }
 
     // MARK: - Properties
@@ -424,10 +427,8 @@ final class LiquidGlassKnobView: UIView {
         renderer.glassUniforms.scrollVelocity = wobbleAnimator.normalizedVelocity
         renderer.glassUniforms.time = Float(CACurrentMediaTime())
         renderer.glassUniforms.edgeIntensity = Constants.edgeIntensity
-        renderer.glassUniforms.refractionScaleX = 1.0
-        renderer.glassUniforms.refractionScaleY = 1.0
-        renderer.glassUniforms.chromaticScaleX = 1.0
-        renderer.glassUniforms.chromaticScaleY = 1.0
+        renderer.glassUniforms.borderOuter = Constants.borderOuter
+        renderer.glassUniforms.borderInner = Constants.borderInner
     }
 
     // MARK: - Shadow
