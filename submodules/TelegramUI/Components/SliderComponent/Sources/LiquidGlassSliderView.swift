@@ -18,7 +18,6 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     private var isCurrentlyTracking: Bool = false
     private var lastKnobX: CGFloat = 0
     private var lastUpdateTime: CFTimeInterval = 0
-    private var displayLink: CADisplayLink?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -50,9 +49,12 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         glassKnobView = LiquidGlassKnobView()
         glassKnobView.knobWidth = Constants.thumbWidth
         glassKnobView.knobHeight = Constants.thumbHeight
+        glassKnobView.onTick = { [weak self] in
+            guard let self else { return }
+            self.updateTrackFill()
+            self.trackVelocityIfNeeded()
+        }
         addSubview(glassKnobView)
-
-        setupDisplayLink()
 
         let longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
         longPressGesture.minimumPressDuration = 0
@@ -91,19 +93,7 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         }
     }
 
-    private func setupDisplayLink() {
-        displayLink = CADisplayLink(target: self, selector: #selector(displayLinkFired))
-        if #available(iOS 15.0, *) {
-            displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
-        } else {
-            displayLink?.preferredFramesPerSecond = 60
-        }
-        displayLink?.add(to: .main, forMode: .common)
-    }
-
-    @objc private func displayLinkFired() {
-        updateTrackFill()
-
+    private func trackVelocityIfNeeded() {
         guard isCurrentlyTracking else { return }
 
         let currentX = knobView.center.x
@@ -117,10 +107,6 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
 
         lastKnobX = currentX
         lastUpdateTime = currentTime
-    }
-
-    deinit {
-        displayLink?.invalidate()
     }
 
     override func layoutSubviews() {

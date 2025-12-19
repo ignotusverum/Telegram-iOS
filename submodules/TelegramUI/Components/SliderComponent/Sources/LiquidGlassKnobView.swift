@@ -48,6 +48,8 @@ final class LiquidGlassKnobView: UIView {
 
     private(set) var isExpanded: Bool = false
 
+    var onTick: (() -> Void)?
+
     private var collapsedKnobView: UIView!
 
     private var metalView: MTKView?
@@ -127,7 +129,6 @@ final class LiquidGlassKnobView: UIView {
         setupCollapsedKnob()
         setupMetal()
         setupAnimators()
-        setupDisplayLink()
     }
 
     private func setupCollapsedKnob() {
@@ -154,7 +155,6 @@ final class LiquidGlassKnobView: UIView {
         mtkView.isOpaque = false
         mtkView.backgroundColor = .clear
         mtkView.framebufferOnly = false
-        mtkView.preferredFramesPerSecond = 120
         mtkView.isPaused = true
         mtkView.enableSetNeedsDisplay = false
         mtkView.clipsToBounds = false
@@ -188,7 +188,8 @@ final class LiquidGlassKnobView: UIView {
         wobbleAnimator.maxVelocity = 800
     }
 
-    private func setupDisplayLink() {
+    private func startDisplayLink() {
+        guard displayLink == nil else { return }
         displayLink = CADisplayLink(target: self, selector: #selector(displayLinkFired))
         if #available(iOS 15.0, *) {
             displayLink?.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
@@ -196,6 +197,11 @@ final class LiquidGlassKnobView: UIView {
             displayLink?.preferredFramesPerSecond = 60
         }
         displayLink?.add(to: .main, forMode: .common)
+    }
+
+    private func stopDisplayLink() {
+        displayLink?.invalidate()
+        displayLink = nil
     }
 
     override func layoutSubviews() {
@@ -238,15 +244,20 @@ final class LiquidGlassKnobView: UIView {
 
         let scaleSettled = scaleAnimator.isSettled
         let wobbleSettled = wobbleAnimator.isSettled
+        let settled = scaleSettled && wobbleSettled
 
         if isExpanded {
             BackdropCoordinator.shared.setNeedsCapture()
         }
         BackdropCoordinator.shared.captureIfNeeded()
 
-        if !scaleSettled || !wobbleSettled || isExpanded {
-            updateLayout()
-            updateShadow()
+        updateLayout()
+        updateShadow()
+        metalView?.draw()
+        onTick?()
+
+        if settled && !isExpanded {
+            stopDisplayLink()
         }
     }
 
@@ -257,6 +268,7 @@ final class LiquidGlassKnobView: UIView {
         BackdropCoordinator.shared.setNeedsCapture()
         scaleAnimator.target = Constants.expandedScale
         wobbleAnimator.triggerLift()
+        startDisplayLink()
     }
 
     func collapse() {
