@@ -18,7 +18,6 @@ private final class SwitchNodeView: UISwitch {
 }
 
 open class SwitchNode: ASDisplayNode {
-    // MARK: - Global Configuration
 
     public static var enableCustomLiquidGlass: Bool = true
 
@@ -26,8 +25,6 @@ open class SwitchNode: ASDisplayNode {
     public static var glassViewConfigurer: ((UIView, Bool, UIColor, UIColor) -> Void)?
     public static var glassViewValueGetter: ((UIView) -> Bool)?
     public static var glassViewValueSetter: ((UIView, Bool, Bool) -> Void)?
-
-    // MARK: - Instance Properties
 
     private var isUsingGlassSwitch: Bool = false
 
@@ -49,7 +46,6 @@ open class SwitchNode: ASDisplayNode {
     public var handleColor = UIColor(rgb: 0xffffff) {
         didSet {
             if self.isNodeLoaded {
-                //(self.view as? UISwitch)?.thumbTintColor = self.handleColor
             }
         }
     }

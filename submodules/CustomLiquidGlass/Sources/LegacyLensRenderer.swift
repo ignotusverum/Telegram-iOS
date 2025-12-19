@@ -41,11 +41,11 @@ public struct LegacyGlassUniforms {
     public var borderOuter: Float = 0
     public var borderInner: Float = 0
     public var uvOffset: SIMD2<Float> = .zero
+    public var uvScale: SIMD2<Float> = SIMD2<Float>(1, 1)
 
     public init() {}
 }
 
-// EXACTLY matches SdfUniforms in original shader
 public struct LegacySdfUniforms {
     public var position: SIMD2<Float> = .zero
     public var size: SIMD2<Float> = .zero
@@ -55,7 +55,6 @@ public struct LegacySdfUniforms {
     public init() {}
 }
 
-// EXACTLY matches TabUniforms in original shader
 public struct LegacyTabUniforms {
     public var positions: (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>,
                     SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>) =
@@ -147,14 +146,20 @@ public final class LegacyLensRenderer: NSObject, MTKViewDelegate {
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
-    /// Update uniforms based on backdrop capture rect for proper UV transformation
-    public func updateForBackdrop(unionRect: CGRect, glassFrame: CGRect, screenScale: CGFloat) {
-        // Compute UV offset for this client's frame within the union capture rect
+    public func updateForBackdrop(unionRect: CGRect, clientCaptureFrame: CGRect, screenScale: CGFloat) {
         guard unionRect.width > 0 && unionRect.height > 0 else { return }
 
-        let offsetX = Float((glassFrame.minX - unionRect.minX) * screenScale)
-        let offsetY = Float((glassFrame.minY - unionRect.minY) * screenScale)
-        glassUniforms.uvOffset = SIMD2<Float>(offsetX, offsetY)
+        let uvOffsetX = Float((clientCaptureFrame.minX - unionRect.minX) / unionRect.width)
+        let uvOffsetY = Float((clientCaptureFrame.minY - unionRect.minY) / unionRect.height)
+        glassUniforms.uvOffset = SIMD2<Float>(uvOffsetX, uvOffsetY)
+
+        let uvScaleX = Float(clientCaptureFrame.width / unionRect.width)
+        let uvScaleY = Float(clientCaptureFrame.height / unionRect.height)
+        glassUniforms.uvScale = SIMD2<Float>(uvScaleX, uvScaleY)
+    }
+
+    public func updateForBackdrop(unionRect: CGRect, glassFrame: CGRect, screenScale: CGFloat) {
+        updateForBackdrop(unionRect: unionRect, clientCaptureFrame: glassFrame, screenScale: screenScale)
     }
 
     public func draw(in view: MTKView) {

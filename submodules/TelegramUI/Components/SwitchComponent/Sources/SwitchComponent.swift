@@ -72,7 +72,6 @@ public final class SwitchComponent: Component {
             self.component = component
 
             if component.enableLiquidGlass {
-                // Use LiquidGlassSwitchView
                 self.switchView?.removeFromSuperview()
                 self.switchView = nil
 
@@ -98,7 +97,6 @@ public final class SwitchComponent: Component {
                 glassSwitch.frame = CGRect(origin: .zero, size: size)
                 return size
             } else {
-                // Use standard UISwitch
                 self.liquidGlassSwitchView?.removeFromSuperview()
                 self.liquidGlassSwitchView = nil
 
@@ -131,10 +129,7 @@ public final class SwitchComponent: Component {
     }
 }
 
-// MARK: - SwitchNode Factory Registration
-
 public func setupLiquidGlassSwitchFactory() {
-    // Only use custom liquid glass switch on iOS 26+ where native liquid glass is available
     SwitchNode.glassViewFactory = {
         LiquidGlassSwitchView()
     }

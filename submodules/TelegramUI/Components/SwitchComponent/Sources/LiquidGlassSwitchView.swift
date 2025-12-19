@@ -4,7 +4,6 @@ import CustomLiquidGlass
 
 private final class LiquidGlassSwitchViewLayer: CALayer {
     override func setNeedsDisplay() {
-        // Override to prevent unnecessary redraws with AsyncDisplayKit
     }
 }
 
@@ -17,8 +16,6 @@ public final class LiquidGlassSwitchView: UIControl {
             return LiquidGlassSwitchViewLayer.self
         }
     }
-
-    // MARK: - Constants
 
     private enum Constants {
         static let trackWidth: CGFloat = 64
@@ -40,8 +37,6 @@ public final class LiquidGlassSwitchView: UIControl {
         static let heightDeformRatio: CGFloat = 0.75
     }
 
-    // MARK: - Public Properties
-
     public private(set) var isOn: Bool = false {
         didSet {
             if oldValue != isOn {
@@ -62,8 +57,6 @@ public final class LiquidGlassSwitchView: UIControl {
         didSet { updateEnabledState() }
     }
 
-    // MARK: - Views
-
     private var trackContainer: UIView!
     private var trackTintLayer: CALayer!
     private var thumbBackground: UIView!
@@ -72,12 +65,8 @@ public final class LiquidGlassSwitchView: UIControl {
     private var renderer: LegacyLensRenderer?
     private var hasValidBackdrop: Bool = false
 
-    // MARK: - BackdropClient Support
-
     private lazy var _backdropClientID = UUID()
     private var _captureState: (metalHidden: Bool, thumbHidden: Bool) = (true, true)
-
-    // MARK: - Animation
 
     private var positionAnimator = LegacyScaleAnimator()
     private var thumbScaleAnimator = LegacyScaleAnimator()
@@ -85,8 +74,6 @@ public final class LiquidGlassSwitchView: UIControl {
     private var displayLink: CADisplayLink?
     private var pendingCollapseWork: DispatchWorkItem?
     private var panDidStart = false
-
-    // MARK: - Computed Properties
 
     private var thumbMinX: CGFloat {
         Constants.thumbPadding + Constants.thumbWidth / 2
@@ -114,8 +101,6 @@ public final class LiquidGlassSwitchView: UIControl {
         return bounds.insetBy(dx: -padding, dy: -padding)
     }
 
-    // MARK: - Initialization
-
     public override init(frame: CGRect) {
         super.init(frame: frame)
         print("[LiquidGlassSwitchView] init with frame: \(frame)")
@@ -131,8 +116,6 @@ public final class LiquidGlassSwitchView: UIControl {
         displayLink?.invalidate()
         BackdropCoordinator.shared.unregister(self)
     }
-
-    // MARK: - Setup
 
     private func setup() {
         backgroundColor = .clear
@@ -180,8 +163,8 @@ public final class LiquidGlassSwitchView: UIControl {
         metalContainerView.backgroundColor = .clear
         metalContainerView.isUserInteractionEnabled = false
         metalContainerView.isHidden = true
-        metalContainerView.frame = .zero  // Will be set in updateThumbFrame when needed
-        addSubview(metalContainerView)  // On top of other views when expanded
+        metalContainerView.frame = .zero
+        addSubview(metalContainerView)
 
         let mtkView = MTKView(frame: .zero, device: device)
         mtkView.isOpaque = false
@@ -210,8 +193,6 @@ public final class LiquidGlassSwitchView: UIControl {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         addGestureRecognizer(pan)
 
-        // Long press with minimumPressDuration=0 for immediate expansion on touch
-        // Tap-to-toggle is handled in .ended when no pan occurred
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
         longPress.minimumPressDuration = 0
         addGestureRecognizer(longPress)
@@ -219,11 +200,11 @@ public final class LiquidGlassSwitchView: UIControl {
 
     private func setupAnimators() {
         positionAnimator.stiffness = 400
-        positionAnimator.damping = 18  // Faster response for switch
+        positionAnimator.damping = 18
         positionAnimator.setValue(thumbMinX, animated: false)
 
         thumbScaleAnimator.stiffness = 400
-        thumbScaleAnimator.damping = 18  // Faster response for switch
+        thumbScaleAnimator.damping = 18
         thumbScaleAnimator.setValue(1.0, animated: false)
 
         wobbleAnimator.limits = .subtle
@@ -236,8 +217,6 @@ public final class LiquidGlassSwitchView: UIControl {
         }
         displayLink?.add(to: .main, forMode: .common)
     }
-
-    // MARK: - Layout
 
     public override var intrinsicContentSize: CGSize {
         CGSize(width: Constants.trackWidth, height: Constants.trackHeight)
@@ -258,7 +237,6 @@ public final class LiquidGlassSwitchView: UIControl {
 
         print("[LiquidGlassSwitchView] layoutSubviews - frame: \(frame), bounds: \(bounds), superview: \(String(describing: superview))")
 
-        // Use intrinsic size if bounds are empty
         let effectiveWidth = bounds.width > 0 ? bounds.width : Constants.trackWidth
         let effectiveHeight = bounds.height > 0 ? bounds.height : Constants.trackHeight
 
@@ -350,8 +328,6 @@ public final class LiquidGlassSwitchView: UIControl {
         isUserInteractionEnabled = isEnabled
     }
 
-    // MARK: - Display Link
-
     @objc private func displayLinkFired() {
         positionAnimator.step()
         thumbScaleAnimator.step()
@@ -363,7 +339,6 @@ public final class LiquidGlassSwitchView: UIControl {
 
         let willBeExpanded = thumbScaleAnimator.current > Constants.expandedThreshold
         let isPositionAnimating = !positionAnimator.isSettled
-        // Request capture while expanded AND position/track is animating (track color changes)
         if willBeExpanded && isPositionAnimating {
             BackdropCoordinator.shared.setNeedsCapture()
         } else if willBeExpanded && !hasValidBackdrop {
@@ -377,8 +352,6 @@ public final class LiquidGlassSwitchView: UIControl {
         }
     }
 
-    // MARK: - Gestures
-
     @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
         switch gesture.state {
         case .began:
@@ -386,7 +359,6 @@ public final class LiquidGlassSwitchView: UIControl {
             thumbScaleAnimator.target = Constants.expandedScaleX
         case .ended, .cancelled:
             if !panDidStart {
-                // Tap behavior - toggle state since no pan occurred
                 isOn = !isOn
                 let targetX = isOn ? thumbMaxX : thumbMinX
                 positionAnimator.target = targetX
@@ -432,8 +404,6 @@ public final class LiquidGlassSwitchView: UIControl {
         }
     }
 
-    // MARK: - Public API
-
     public func setOn(_ on: Bool, animated: Bool) {
         let changed = isOn != on
         isOn = on
@@ -455,11 +425,8 @@ public final class LiquidGlassSwitchView: UIControl {
         }
     }
 
-    // MARK: - Metal Uniforms
-
     private func updateUniforms() {
         guard renderer != nil else { return }
-        // Updated in updateUniformsGeometry
     }
 
     private func updateUniformsGeometry(thumbFrame: CGRect) {
@@ -502,8 +469,6 @@ public final class LiquidGlassSwitchView: UIControl {
     }
 
 }
-
-// MARK: - BackdropClient
 
 extension LiquidGlassSwitchView: BackdropClient {
 
@@ -548,12 +513,9 @@ extension LiquidGlassSwitchView: BackdropClient {
         renderer?.backdropTexture = texture
         hasValidBackdrop = true
 
-        // Update UV transformation - use our captureFrame which matches the Metal view coverage
         renderer?.updateForBackdrop(unionRect: unionRect, clientCaptureFrame: captureFrame, screenScale: screenScale)
     }
 }
-
-// MARK: - Comparable Extension
 
 private extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {

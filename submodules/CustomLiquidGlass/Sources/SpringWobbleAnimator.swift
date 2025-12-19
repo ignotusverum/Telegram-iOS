@@ -1,10 +1,7 @@
 import UIKit
 import simd
 
-/// Spring-based animator for squash & stretch effect with configurable limits
 public final class SpringWobbleAnimator {
-
-    // MARK: - Limits
 
     public struct Limits {
         public var maxWidth: CGFloat = 1.4
@@ -38,9 +35,6 @@ public final class SpringWobbleAnimator {
 
     public var limits: Limits = .default
 
-    // MARK: - Output
-
-    /// Normalized velocity for shader (-1 to 1)
     public var normalizedVelocity: SIMD2<Float> {
         SIMD2<Float>(
             Float(clampedVelocity.x / maxVelocity),
@@ -48,33 +42,24 @@ public final class SpringWobbleAnimator {
         )
     }
 
-    // MARK: - State
-
     public private(set) var velocity: CGPoint = .zero
     public private(set) var clampedVelocity: CGPoint = .zero
     private var targetVelocity: CGPoint = .zero
     private var springVelocity: CGPoint = .zero
     public private(set) var isActive: Bool = false
 
-    // MARK: - Configuration
-
     public var maxVelocity: CGFloat = 1200.0
     public var stiffness: CGFloat = 280.0
     public var damping: CGFloat = 22.0
     public var threshold: CGFloat = 0.005
 
-    // MARK: - Compatibility
-
     public var isSettled: Bool { !isActive }
 
     public init() {}
 
-    // MARK: - Update
-
     public func update(deltaTime dt: CGFloat) {
         guard isActive else { return }
 
-        // Spring toward target
         let dx = targetVelocity.x - velocity.x
         let dy = targetVelocity.y - velocity.y
 
@@ -89,7 +74,6 @@ public final class SpringWobbleAnimator {
 
         clampedVelocity = clampToLimits(velocity)
 
-        // Check settled
         let dist = hypot(velocity.x - targetVelocity.x, velocity.y - targetVelocity.y)
         let speed = hypot(springVelocity.x, springVelocity.y)
 
@@ -103,12 +87,9 @@ public final class SpringWobbleAnimator {
         }
     }
 
-    /// Compatibility wrapper
     public func update(dt: CGFloat) {
         update(deltaTime: dt)
     }
-
-    // MARK: - Clamping
 
     private func clampToLimits(_ v: CGPoint) -> CGPoint {
         let deformStrength: CGFloat = 0.4
@@ -122,9 +103,6 @@ public final class SpringWobbleAnimator {
         return clamped
     }
 
-    // MARK: - Input
-
-    /// Smoothly track velocity during drag (spring follows target)
     public func trackVelocity(_ v: CGPoint) {
         targetVelocity = v
         isActive = true
@@ -134,7 +112,6 @@ public final class SpringWobbleAnimator {
         trackVelocity(CGPoint(x: v, y: 0))
     }
 
-    /// Instantly set velocity (no spring, for initialization)
     public func setVelocity(_ v: CGPoint) {
         velocity = v
         clampedVelocity = clampToLimits(v)
@@ -149,7 +126,6 @@ public final class SpringWobbleAnimator {
     }
 
     public func release(withVelocity v: CGPoint) {
-        // Keep current velocity, spring back to zero
         targetVelocity = .zero
         isActive = true
     }
@@ -162,8 +138,6 @@ public final class SpringWobbleAnimator {
         isActive = false
     }
 
-    // MARK: - Compatibility with old API
-
     public func triggerLift() {
         setVelocity(CGPoint(x: 0, y: -800))
     }
@@ -173,8 +147,6 @@ public final class SpringWobbleAnimator {
     }
 }
 
-// MARK: - Pan Gesture
-
 extension SpringWobbleAnimator {
 
     public func handlePan(_ gesture: UIPanGestureRecognizer, in view: UIView) {
@@ -182,11 +154,9 @@ extension SpringWobbleAnimator {
 
         switch gesture.state {
         case .began, .changed:
-            // Smoothly track velocity during drag
             trackVelocity(v)
 
         case .ended, .cancelled:
-            // Spring back to zero on release
             release(withVelocity: v)
 
         default:

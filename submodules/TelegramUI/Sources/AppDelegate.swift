@@ -322,7 +322,6 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         precondition(!testIsLaunched)
         testIsLaunched = true
 
-        // Setup liquid glass switch factory early
         setupLiquidGlassSwitchFactory()
         
         let _ = voipTokenPromise.get().start(next: { token in

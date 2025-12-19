@@ -3,21 +3,15 @@ import LegacyComponents
 
 final class LiquidGlassSliderView: TGPhotoEditorSliderView {
 
-    // MARK: - Constants
-
     private enum Constants {
         static let trackHeight: CGFloat = 8
         static let thumbWidth: CGFloat = 38
         static let thumbHeight: CGFloat = 24
     }
 
-    // MARK: - Views
-
     private var trackContainer: UIView!
     private var trackTintLayer: CALayer!
     private var glassKnobView: LiquidGlassKnobView!
-
-    // MARK: - Properties
 
     var onTrackingChanged: ((Bool) -> Void)?
 
@@ -25,8 +19,6 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     private var lastKnobX: CGFloat = 0
     private var lastUpdateTime: CFTimeInterval = 0
     private var displayLink: CADisplayLink?
-
-    // MARK: - Initialization
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -38,45 +30,35 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         setupLiquidGlass()
     }
 
-    // MARK: - Setup
-
     private func setupLiquidGlass() {
-        // Hide original drawing
         backgroundColor = .clear
         isOpaque = false
-        clipsToBounds = false  // Allow expanded knob to overflow
+        clipsToBounds = false
 
-        // Hide original knob
         knobView.isHidden = true
         knobView.alpha = 0
 
-        // Setup track container
         trackContainer = UIView()
         trackContainer.isUserInteractionEnabled = false
         trackContainer.layer.masksToBounds = true
         insertSubview(trackContainer, at: 0)
 
-        // Setup track tint layer (filled portion)
         trackTintLayer = CALayer()
         trackTintLayer.masksToBounds = true
         trackContainer.layer.addSublayer(trackTintLayer)
 
-        // Setup glass knob
         glassKnobView = LiquidGlassKnobView()
         glassKnobView.knobWidth = Constants.thumbWidth
         glassKnobView.knobHeight = Constants.thumbHeight
         addSubview(glassKnobView)
 
-        // Setup display link for velocity tracking
         setupDisplayLink()
 
-        // Setup long press gesture for tap & hold expand (like LegacyLiquidLensView)
         let longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
         longPressGesture.minimumPressDuration = 0
         longPressGesture.delegate = self
         addGestureRecognizer(longPressGesture)
 
-        // Setup interaction callbacks
         interactionBegan = { [weak self] in
             guard let self else { return }
             self.isCurrentlyTracking = true
@@ -120,7 +102,6 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     }
 
     @objc private func displayLinkFired() {
-        // Update track fill every frame to stay in sync with knob
         updateTrackFill()
 
         guard isCurrentlyTracking else { return }
@@ -129,7 +110,7 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         let currentTime = CACurrentMediaTime()
         let dt = currentTime - lastUpdateTime
 
-        if dt > 0.001 {  // Avoid division by zero
+        if dt > 0.001 {
             let velocity = (currentX - lastKnobX) / CGFloat(dt)
             glassKnobView.trackVelocity(velocity)
         }
@@ -142,15 +123,12 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         displayLink?.invalidate()
     }
 
-    // MARK: - Layout
-
     override func layoutSubviews() {
         super.layoutSubviews()
 
         let trackY = (bounds.height - Constants.trackHeight) / 2
         let padding = Constants.thumbWidth / 2
 
-        // Track container has same padding as knob so they align
         trackContainer.frame = CGRect(
             x: padding,
             y: trackY,
@@ -159,28 +137,18 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         )
         trackContainer.layer.cornerRadius = Constants.trackHeight / 2
 
-        // Track tint layer
         trackTintLayer.frame = trackContainer.bounds
         trackTintLayer.cornerRadius = Constants.trackHeight / 2
 
-        // Glass knob view spans full bounds
         glassKnobView.frame = bounds
 
-        // Sync knob position with parent's knobView
         updateKnobPosition()
         updateTrackFill()
     }
 
-    // MARK: - Drawing
-
     override func draw(_ rect: CGRect) {
-        // Override to prevent parent's drawing
-        // We handle all rendering with our custom views/layers
     }
 
-    // MARK: - Track Updates
-
-    /// Calculate expected knob center X from value (no animation lag)
     private func expectedKnobCenterX() -> CGFloat {
         let normalizedValue: CGFloat
         if maximumValue > minimumValue {
@@ -188,7 +156,6 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         } else {
             normalizedValue = 0
         }
-        // Knob center moves with padding so knob is fully visible at edges
         let padding = Constants.thumbWidth / 2
         let totalLength = bounds.width - padding * 2
         return padding + totalLength * normalizedValue
@@ -197,14 +164,11 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     private func updateTrackFill() {
         guard trackContainer.bounds.width > 0 else { return }
 
-        // Always use calculated position to align with knob center
         let knobCenterX = expectedKnobCenterX()
 
-        // Fill extends from track start to knob center (relative to track container)
         let padding = Constants.thumbWidth / 2
         let fillWidth = knobCenterX - padding
 
-        // Remove ALL animations and set frame immediately
         trackTintLayer.removeAllAnimations()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -219,11 +183,8 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     }
 
     private func updateKnobPosition() {
-        // Always use calculated position to align with track edges
         glassKnobView.knobCenterX = expectedKnobCenterX()
     }
-
-    // MARK: - Value Changes
 
     override var value: CGFloat {
         didSet {
@@ -232,15 +193,11 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         }
     }
 
-    // MARK: - Color Configuration
-
     func configureColors(trackBackground: UIColor, trackForeground: UIColor) {
         trackContainer.backgroundColor = trackBackground
         trackTintLayer.backgroundColor = trackForeground.cgColor
     }
 }
-
-// MARK: - UIGestureRecognizerDelegate
 
 extension LiquidGlassSliderView: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {

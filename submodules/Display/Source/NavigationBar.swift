@@ -138,8 +138,6 @@ public enum NavigationPreviousAction: Equatable {
 
 private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
 
-/// Global flag to enable CABackdropLayer for liquid glass compatibility
-/// Set this to true when using custom liquid glass effects
 public var sharedUseBackdropLayerForBlur: Bool = true
 
 public final class NavigationBackgroundNode: ASDisplayNode {
@@ -207,7 +205,6 @@ public final class NavigationBackgroundNode: ASDisplayNode {
         }
         if self.enableBlur && !sharedIsReduceTransparencyEnabled && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {
             if self.useBackdropLayer && BackdropLayerWrapper.isAvailable() {
-                // Use CABackdropLayer for liquid glass compatibility
                 if self.backdropLayer == nil {
                     let blurIntensity: CGFloat = self.customBlurRadius.map { $0 / 45.0 } ?? 0.6
                     let saturation: CGFloat = self.enableSaturation ? 1.4 : 1.0
@@ -225,13 +222,11 @@ public final class NavigationBackgroundNode: ASDisplayNode {
                         self.layer.insertSublayer(backdrop, at: 0)
                     }
                 }
-                // Remove effectView if it exists
                 if let effectView = self.effectView {
                     self.effectView = nil
                     effectView.removeFromSuperview()
                 }
             } else {
-                // Use UIVisualEffectView (original behavior)
                 if self.effectView == nil {
                     let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
 
@@ -273,7 +268,6 @@ public final class NavigationBackgroundNode: ASDisplayNode {
                     self.effectView = effectView
                     self.view.insertSubview(effectView, at: 0)
                 }
-                // Remove backdropLayer if it exists
                 if let backdrop = self.backdropLayer {
                     self.backdropLayer = nil
                     backdrop.removeFromSuperlayer()

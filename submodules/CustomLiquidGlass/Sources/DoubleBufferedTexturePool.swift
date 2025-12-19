@@ -19,8 +19,6 @@ final class DoubleBufferedTexturePool {
         self.device = device
     }
 
-    /// Returns a CGContext for CPU writing to the back buffer.
-    /// Creates or recreates buffers if size changed.
     func getBackBuffer(size: CGSize, scale: CGFloat) -> CGContext? {
         let pixelSize = CGSize(
             width: ceil(size.width * scale),
@@ -38,7 +36,6 @@ final class DoubleBufferedTexturePool {
         return buffer.context
     }
 
-    /// Unlocks the back buffer after CPU writing is complete.
     func unlockBackBuffer() {
         let backIndex = (currentIndex + 1) % 2
         if let buffer = buffers[backIndex] {
@@ -46,18 +43,15 @@ final class DoubleBufferedTexturePool {
         }
     }
 
-    /// Swaps front and back buffers, returns the texture for GPU reading.
     func swapAndGetTexture() -> MTLTexture? {
         currentIndex = (currentIndex + 1) % 2
         return buffers[currentIndex]?.texture
     }
 
-    /// Returns the current front buffer texture without swapping.
     func getCurrentTexture() -> MTLTexture? {
         return buffers[currentIndex]?.texture
     }
 
-    /// Resets the pool, releasing all buffers.
     func reset() {
         buffers = [nil, nil]
         currentSize = .zero
@@ -119,7 +113,6 @@ final class DoubleBufferedTexturePool {
             return nil
         }
 
-        // Flip Y coordinate to match Metal's coordinate system
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: 1, y: -1)
 

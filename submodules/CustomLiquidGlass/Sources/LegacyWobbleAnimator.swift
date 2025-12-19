@@ -62,7 +62,6 @@ public final class LegacyWobbleAnimator {
     }
 
     public func update(dt: CGFloat) {
-        // Auto-release if idle for too long
         if lastVelocityTrackTime > 0 {
             let timeSinceLastTrack = CACurrentMediaTime() - lastVelocityTrackTime
             if timeSinceLastTrack > idleTimeout && targetVelocity != .zero {
