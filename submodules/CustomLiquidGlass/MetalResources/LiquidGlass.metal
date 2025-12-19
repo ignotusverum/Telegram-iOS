@@ -29,6 +29,7 @@ struct GlassUniforms {
     float  borderOuter;
     float  borderInner;
     float2 uvOffset;
+    float2 uvScale;
 };
 
 struct SdfUniforms {
@@ -283,7 +284,7 @@ fragment float4 liquidGlassTabBarFragment(
     bool insideSdf = sdfEnabled && sdfDist < 0.0;
     if (!insideGlass && !insideSdf) discard_fragment();
 
-    float2 uv = in.texCoord + glass.uvOffset / glass.viewSize;
+    float2 uv = glass.uvOffset + in.texCoord * glass.uvScale;
 
     if (!insideGlass && insideSdf) {
         vec3_t color = vec3_t(backdropTexture.sample(linearSampler, uv).rgb);

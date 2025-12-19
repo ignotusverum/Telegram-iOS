@@ -548,11 +548,8 @@ extension LiquidGlassSwitchView: BackdropClient {
         renderer?.backdropTexture = texture
         hasValidBackdrop = true
 
-        // Update uniforms based on capture rect
-        guard let window = window else { return }
-        let thumbFrame = thumbBackground?.frame ?? .zero
-        let glassFrameInWindow = convert(thumbFrame, to: window)
-        renderer?.updateForBackdrop(unionRect: unionRect, glassFrame: glassFrameInWindow, screenScale: screenScale)
+        // Update UV transformation - use our captureFrame which matches the Metal view coverage
+        renderer?.updateForBackdrop(unionRect: unionRect, clientCaptureFrame: captureFrame, screenScale: screenScale)
     }
 }
 
