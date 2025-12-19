@@ -1,7 +1,8 @@
 import UIKit
 import simd
 
-public final class SwitchWobbleAnimator {
+/// Spring-based animator for squash & stretch effect with configurable limits
+public final class SpringWobbleAnimator {
 
     // MARK: - Limits
 
@@ -35,10 +36,11 @@ public final class SwitchWobbleAnimator {
         }
     }
 
-    public var limits: Limits = .subtle
+    public var limits: Limits = .default
 
     // MARK: - Output
 
+    /// Normalized velocity for shader (-1 to 1)
     public var normalizedVelocity: SIMD2<Float> {
         SIMD2<Float>(
             Float(clampedVelocity.x / maxVelocity),
@@ -72,6 +74,7 @@ public final class SwitchWobbleAnimator {
     public func update(deltaTime dt: CGFloat) {
         guard isActive else { return }
 
+        // Spring toward target
         let dx = targetVelocity.x - velocity.x
         let dy = targetVelocity.y - velocity.y
 
@@ -86,6 +89,7 @@ public final class SwitchWobbleAnimator {
 
         clampedVelocity = clampToLimits(velocity)
 
+        // Check settled
         let dist = hypot(velocity.x - targetVelocity.x, velocity.y - targetVelocity.y)
         let speed = hypot(springVelocity.x, springVelocity.y)
 
@@ -99,6 +103,7 @@ public final class SwitchWobbleAnimator {
         }
     }
 
+    /// Compatibility wrapper
     public func update(dt: CGFloat) {
         update(deltaTime: dt)
     }
@@ -119,6 +124,7 @@ public final class SwitchWobbleAnimator {
 
     // MARK: - Input
 
+    /// Smoothly track velocity during drag (spring follows target)
     public func trackVelocity(_ v: CGPoint) {
         targetVelocity = v
         isActive = true
@@ -128,6 +134,7 @@ public final class SwitchWobbleAnimator {
         trackVelocity(CGPoint(x: v, y: 0))
     }
 
+    /// Instantly set velocity (no spring, for initialization)
     public func setVelocity(_ v: CGPoint) {
         velocity = v
         clampedVelocity = clampToLimits(v)
@@ -142,6 +149,7 @@ public final class SwitchWobbleAnimator {
     }
 
     public func release(withVelocity v: CGPoint) {
+        // Keep current velocity, spring back to zero
         targetVelocity = .zero
         isActive = true
     }
@@ -154,7 +162,7 @@ public final class SwitchWobbleAnimator {
         isActive = false
     }
 
-    // MARK: - Effects
+    // MARK: - Compatibility with old API
 
     public func triggerLift() {
         setVelocity(CGPoint(x: 0, y: -800))
@@ -167,16 +175,18 @@ public final class SwitchWobbleAnimator {
 
 // MARK: - Pan Gesture
 
-extension SwitchWobbleAnimator {
+extension SpringWobbleAnimator {
 
     public func handlePan(_ gesture: UIPanGestureRecognizer, in view: UIView) {
         let v = gesture.velocity(in: view)
 
         switch gesture.state {
         case .began, .changed:
+            // Smoothly track velocity during drag
             trackVelocity(v)
 
         case .ended, .cancelled:
+            // Spring back to zero on release
             release(withVelocity: v)
 
         default:

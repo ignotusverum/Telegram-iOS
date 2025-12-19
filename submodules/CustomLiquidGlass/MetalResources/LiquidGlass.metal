@@ -26,6 +26,8 @@ struct GlassUniforms {
     float  refractionScaleY;
     float  chromaticScaleX;
     float  chromaticScaleY;
+    float  borderOuter;
+    float  borderInner;
     float2 uvOffset;
 };
 
@@ -222,7 +224,7 @@ vec3_t applyUnselectedFills(vec3_t color, float2 pixelPos, constant TabUniforms 
     return color;
 }
 
-vec3_t calculateEdgeEffects(scalar_t glassSdf, scalar_t easedProximity, scalar_t intensity, float2 normDir) {
+vec3_t calculateEdgeEffects(scalar_t glassSdf, scalar_t easedProximity, scalar_t intensity, float2 normDir, scalar_t borderOuter, scalar_t borderInner) {
     if (intensity <= scalar_t(0.0)) return vec3_t(0.0);
 
     scalar_t diagonal = scalar_t(dot(normDir, Glass::diagonalDir));
@@ -232,7 +234,7 @@ vec3_t calculateEdgeEffects(scalar_t glassSdf, scalar_t easedProximity, scalar_t
 
     scalar_t fresnel = pow(easedProximity, Glass::fresnelExponent) * Glass::fresnelIntensity * highlightMask;
     scalar_t edgeMask = smoothstep(Glass::edgeMaskWidth, scalar_t(0.0), absGlassSdf) * Glass::edgeMaskIntensity * highlightMask;
-    scalar_t border = (smoothstep(Glass::borderOuter, scalar_t(0.0), absGlassSdf) - smoothstep(Glass::borderInner, scalar_t(0.0), absGlassSdf)) * Glass::borderIntensity * highlightMask;
+    scalar_t border = (smoothstep(borderOuter, scalar_t(0.0), absGlassSdf) - smoothstep(borderInner, scalar_t(0.0), absGlassSdf)) * Glass::borderIntensity * highlightMask;
     scalar_t shadow = smoothstep(Glass::edgeMaskWidth, scalar_t(0.0), absGlassSdf) * scalar_t(0.15) * shadowMask;
 
     return vec3_t(fresnel + edgeMask + border - shadow) * intensity;
@@ -323,7 +325,7 @@ fragment float4 liquidGlassTabBarFragment(
     float2 smearDir = tangentDir * invViewSize;
 
     vec3_t color = sampleWithChromaticAberration(backdropTexture, linearSampler, refractedUV, chromaticDir, smearDir, chromatic, smear);
-    color += calculateEdgeEffects(scalar_t(glassSdf), easedProximity, scalar_t(glass.edgeIntensity), towardEdgeDir);
+    color += calculateEdgeEffects(scalar_t(glassSdf), easedProximity, scalar_t(glass.edgeIntensity), towardEdgeDir, scalar_t(glass.borderOuter), scalar_t(glass.borderInner));
 
     if (sdfEnabled) {
         color = applyUnselectedFills(color, pixelPos, tabs);

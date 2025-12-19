@@ -67,7 +67,7 @@ final class LiquidGlassKnobView: UIView {
     // MARK: - Metal Components
 
     private var metalView: MTKView?
-    private var renderer: SliderGlassRenderer?
+    private var renderer: LegacyLensRenderer?
     private var hasValidBackdrop: Bool = false
 
     // MARK: - BackdropClient Support
@@ -77,8 +77,8 @@ final class LiquidGlassKnobView: UIView {
 
     // MARK: - Animators
 
-    private var scaleAnimator = SliderScaleAnimator()
-    private var wobbleAnimator = SliderWobbleAnimator()
+    private var scaleAnimator = LegacyScaleAnimator()
+    private var wobbleAnimator = SpringWobbleAnimator()
     private var displayLink: CADisplayLink?
 
     // MARK: - Computed Properties
@@ -194,9 +194,9 @@ final class LiquidGlassKnobView: UIView {
         mtkView.clipsToBounds = false
         mtkView.isUserInteractionEnabled = false
 
-        let glassRenderer = SliderGlassRenderer(device: device)
+        let glassRenderer = LegacyLensRenderer(device: device)
         if glassRenderer == nil {
-            print("[LiquidGlassKnobView] Failed to create SliderGlassRenderer")
+            print("[LiquidGlassKnobView] Failed to create LegacyLensRenderer")
         }
         mtkView.delegate = glassRenderer
 
@@ -213,7 +213,7 @@ final class LiquidGlassKnobView: UIView {
 
     private func setupAnimators() {
         scaleAnimator.stiffness = 400
-        scaleAnimator.damping = 18
+        scaleAnimator.damping = 18  // Faster response for slider
         scaleAnimator.setValue(Constants.collapsedScale, animated: false)
 
         // Use default limits for slider knob (more visible deformation)

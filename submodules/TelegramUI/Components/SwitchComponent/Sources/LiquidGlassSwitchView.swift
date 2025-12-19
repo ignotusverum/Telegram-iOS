@@ -69,7 +69,7 @@ public final class LiquidGlassSwitchView: UIControl {
     private var thumbBackground: UIView!
     private var metalContainerView: UIView!
     private var metalView: MTKView?
-    private var renderer: SwitchGlassRenderer?
+    private var renderer: LegacyLensRenderer?
     private var hasValidBackdrop: Bool = false
 
     // MARK: - BackdropClient Support
@@ -79,9 +79,9 @@ public final class LiquidGlassSwitchView: UIControl {
 
     // MARK: - Animation
 
-    private var positionAnimator = SwitchScaleAnimator()
-    private var thumbScaleAnimator = SwitchScaleAnimator()
-    private var wobbleAnimator = SwitchWobbleAnimator()
+    private var positionAnimator = LegacyScaleAnimator()
+    private var thumbScaleAnimator = LegacyScaleAnimator()
+    private var wobbleAnimator = SpringWobbleAnimator()
     private var displayLink: CADisplayLink?
     private var pendingCollapseWork: DispatchWorkItem?
     private var panDidStart = false
@@ -193,7 +193,7 @@ public final class LiquidGlassSwitchView: UIControl {
         mtkView.clipsToBounds = false
         mtkView.isUserInteractionEnabled = false
 
-        renderer = SwitchGlassRenderer(device: device)
+        renderer = LegacyLensRenderer(device: device)
         mtkView.delegate = renderer
 
         renderer?.onUpdate = { [weak self] in
@@ -219,11 +219,11 @@ public final class LiquidGlassSwitchView: UIControl {
 
     private func setupAnimators() {
         positionAnimator.stiffness = 400
-        positionAnimator.damping = 18
+        positionAnimator.damping = 18  // Faster response for switch
         positionAnimator.setValue(thumbMinX, animated: false)
 
         thumbScaleAnimator.stiffness = 400
-        thumbScaleAnimator.damping = 18
+        thumbScaleAnimator.damping = 18  // Faster response for switch
         thumbScaleAnimator.setValue(1.0, animated: false)
 
         wobbleAnimator.limits = .subtle
@@ -553,18 +553,6 @@ extension LiquidGlassSwitchView: BackdropClient {
         let thumbFrame = thumbBackground?.frame ?? .zero
         let glassFrameInWindow = convert(thumbFrame, to: window)
         renderer?.updateForBackdrop(unionRect: unionRect, glassFrame: glassFrameInWindow, screenScale: screenScale)
-
-        // Compute UV offset/scale for this client's captureFrame within unionRect
-        let myFrame = captureFrame
-        if unionRect.width > 0 && unionRect.height > 0 {
-            let uvOffsetX = Float((myFrame.minX - unionRect.minX) / unionRect.width)
-            let uvOffsetY = Float((myFrame.minY - unionRect.minY) / unionRect.height)
-            let uvScaleX = Float(myFrame.width / unionRect.width)
-            let uvScaleY = Float(myFrame.height / unionRect.height)
-
-            renderer?.glassUniforms.backdropUVOffset = SIMD2<Float>(uvOffsetX, uvOffsetY)
-            renderer?.glassUniforms.backdropUVScale = SIMD2<Float>(uvScaleX, uvScaleY)
-        }
     }
 }
 

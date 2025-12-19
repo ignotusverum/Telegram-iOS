@@ -1,3 +1,4 @@
+import UIKit
 import MetalKit
 import simd
 
@@ -37,6 +38,8 @@ public struct LegacyGlassUniforms {
     public var refractionScaleY: Float = 0.5
     public var chromaticScaleX: Float = 1.0
     public var chromaticScaleY: Float = 0.25
+    public var borderOuter: Float = 0
+    public var borderInner: Float = 0
     public var uvOffset: SIMD2<Float> = .zero
 
     public init() {}
@@ -143,6 +146,16 @@ public final class LegacyLensRenderer: NSObject, MTKViewDelegate {
     }
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+
+    /// Update uniforms based on backdrop capture rect for proper UV transformation
+    public func updateForBackdrop(unionRect: CGRect, glassFrame: CGRect, screenScale: CGFloat) {
+        // Compute UV offset for this client's frame within the union capture rect
+        guard unionRect.width > 0 && unionRect.height > 0 else { return }
+
+        let offsetX = Float((glassFrame.minX - unionRect.minX) * screenScale)
+        let offsetY = Float((glassFrame.minY - unionRect.minY) * screenScale)
+        glassUniforms.uvOffset = SIMD2<Float>(offsetX, offsetY)
+    }
 
     public func draw(in view: MTKView) {
         onUpdate?()
