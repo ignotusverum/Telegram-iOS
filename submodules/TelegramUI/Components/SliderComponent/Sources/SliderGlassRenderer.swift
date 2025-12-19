@@ -39,6 +39,7 @@ struct SliderGlassUniforms {
     var chromaticScaleY: Float = 0.25
     var borderOuter: Float = 0
     var borderInner: Float = 0
+    var uvOffset: SIMD2<Float> = .zero
 }
 
 // EXACTLY matches SdfUniforms in shader
@@ -181,5 +182,34 @@ final class SliderGlassRenderer: NSObject, MTKViewDelegate {
 
         cmdBuffer.present(drawable)
         cmdBuffer.commit()
+    }
+}
+
+extension SliderGlassRenderer {
+
+    /// Updates uniforms based on backdrop capture rect
+    func updateForBackdrop(unionRect: CGRect, glassFrame: CGRect, screenScale: CGFloat) {
+        glassUniforms.viewSize = SIMD2<Float>(
+            Float(unionRect.width * screenScale),
+            Float(unionRect.height * screenScale)
+        )
+
+        glassUniforms.glassOrigin = SIMD2<Float>(
+            Float((glassFrame.origin.x - unionRect.origin.x) * screenScale),
+            Float((glassFrame.origin.y - unionRect.origin.y) * screenScale)
+        )
+
+        glassUniforms.glassSize = SIMD2<Float>(
+            Float(glassFrame.width * screenScale),
+            Float(glassFrame.height * screenScale)
+        )
+    }
+
+    /// For slider/drag: offset UVs virtually without new capture
+    func setVirtualOffset(_ offset: CGPoint, screenScale: CGFloat) {
+        glassUniforms.uvOffset = SIMD2<Float>(
+            Float(offset.x * screenScale),
+            Float(offset.y * screenScale)
+        )
     }
 }

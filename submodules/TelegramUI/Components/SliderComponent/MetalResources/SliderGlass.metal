@@ -23,6 +23,7 @@ struct GlassUniforms {
     float  chromaticScaleY;
     float  borderOuter;
     float  borderInner;
+    float2 uvOffset;
 };
 
 struct SdfUniforms {
@@ -287,7 +288,7 @@ fragment float4 liquidGlassTabBarFragment(
     const float kPaddingAmount = GlassEffects::paddingPercent;
 
     float2 pixelPos = in.texCoord * glass.viewSize;
-    float2 uv = in.texCoord;
+    float2 uv = in.texCoord + glass.uvOffset / glass.viewSize;
 
     float2 glassCenter = glass.glassOrigin + glass.glassSize * 0.5;
     float2 relativePos = pixelPos - glassCenter;
@@ -381,7 +382,7 @@ fragment float4 liquidGlassSdfFragment(
     constant SdfUniforms &sdf2 [[buffer(2)]]
 ) {
     float2 pixelPos = in.texCoord * glass.viewSize;
-    float2 uv = in.texCoord;
+    float2 uv = in.texCoord + glass.uvOffset / glass.viewSize;
 
     float sdf1Dist = calculateSdf(pixelPos, sdf1);
     float sdf2Dist = calculateSdf(pixelPos, sdf2);

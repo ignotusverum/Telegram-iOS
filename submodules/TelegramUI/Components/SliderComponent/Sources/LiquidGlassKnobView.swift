@@ -453,5 +453,16 @@ extension LiquidGlassKnobView: BackdropClient {
     public func didReceiveBackdrop(_ texture: MTLTexture, unionRect: CGRect, screenScale: CGFloat) {
         renderer?.backdropTexture = texture
         hasValidBackdrop = true
+
+        // Update uniforms based on capture rect
+        guard let window = window else { return }
+        let knobFrame = CGRect(
+            x: knobCenterX - currentKnobWidth / 2,
+            y: (bounds.height - currentKnobHeight) / 2,
+            width: currentKnobWidth,
+            height: currentKnobHeight
+        )
+        let glassFrameInWindow = convert(knobFrame, to: window)
+        renderer?.updateForBackdrop(unionRect: unionRect, glassFrame: glassFrameInWindow, screenScale: screenScale)
     }
 }

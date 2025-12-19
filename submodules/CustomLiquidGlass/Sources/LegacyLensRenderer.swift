@@ -37,6 +37,7 @@ public struct LegacyGlassUniforms {
     public var refractionScaleY: Float = 0.5
     public var chromaticScaleX: Float = 1.0
     public var chromaticScaleY: Float = 0.25
+    public var uvOffset: SIMD2<Float> = .zero
 
     public init() {}
 }

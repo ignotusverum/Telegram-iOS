@@ -84,6 +84,7 @@ public final class LiquidGlassSwitchView: UIControl {
     private var wobbleAnimator = SwitchWobbleAnimator()
     private var displayLink: CADisplayLink?
     private var pendingCollapseWork: DispatchWorkItem?
+    private var panDidStart = false
 
     // MARK: - Computed Properties
 
@@ -206,11 +207,14 @@ public final class LiquidGlassSwitchView: UIControl {
     }
 
     private func setupGestures() {
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
-        addGestureRecognizer(tap)
-
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         addGestureRecognizer(pan)
+
+        // Long press with minimumPressDuration=0 for immediate expansion on touch
+        // Tap-to-toggle is handled in .ended when no pan occurred
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        longPress.minimumPressDuration = 0
+        addGestureRecognizer(longPress)
     }
 
     private func setupAnimators() {
@@ -375,16 +379,22 @@ public final class LiquidGlassSwitchView: UIControl {
 
     // MARK: - Gestures
 
-    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-        pendingCollapseWork?.cancel()
-
-        thumbScaleAnimator.target = Constants.expandedScaleX
-
-        isOn = !isOn
-        let targetX = isOn ? thumbMaxX : thumbMinX
-        positionAnimator.target = targetX
-
-        scheduleCollapse(delay: 0.2)
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            pendingCollapseWork?.cancel()
+            thumbScaleAnimator.target = Constants.expandedScaleX
+        case .ended, .cancelled:
+            if !panDidStart {
+                // Tap behavior - toggle state since no pan occurred
+                isOn = !isOn
+                let targetX = isOn ? thumbMaxX : thumbMinX
+                positionAnimator.target = targetX
+            }
+            scheduleCollapse(delay: 0.1)
+        default:
+            break
+        }
     }
 
     private func scheduleCollapse(delay: TimeInterval) {
@@ -404,12 +414,14 @@ public final class LiquidGlassSwitchView: UIControl {
 
         switch gesture.state {
         case .began:
+            panDidStart = true
             pendingCollapseWork?.cancel()
             thumbScaleAnimator.target = Constants.expandedScaleX
         case .changed:
             let targetX = thumbMinX + progress * (thumbMaxX - thumbMinX)
             positionAnimator.target = targetX
         case .ended, .cancelled:
+            panDidStart = false
             let shouldBeOn = progress > 0.5
             isOn = shouldBeOn
             let targetX = shouldBeOn ? thumbMaxX : thumbMinX
@@ -535,6 +547,24 @@ extension LiquidGlassSwitchView: BackdropClient {
     public func didReceiveBackdrop(_ texture: MTLTexture, unionRect: CGRect, screenScale: CGFloat) {
         renderer?.backdropTexture = texture
         hasValidBackdrop = true
+
+        // Update uniforms based on capture rect
+        guard let window = window else { return }
+        let thumbFrame = thumbBackground?.frame ?? .zero
+        let glassFrameInWindow = convert(thumbFrame, to: window)
+        renderer?.updateForBackdrop(unionRect: unionRect, glassFrame: glassFrameInWindow, screenScale: screenScale)
+
+        // Compute UV offset/scale for this client's captureFrame within unionRect
+        let myFrame = captureFrame
+        if unionRect.width > 0 && unionRect.height > 0 {
+            let uvOffsetX = Float((myFrame.minX - unionRect.minX) / unionRect.width)
+            let uvOffsetY = Float((myFrame.minY - unionRect.minY) / unionRect.height)
+            let uvScaleX = Float(myFrame.width / unionRect.width)
+            let uvScaleY = Float(myFrame.height / unionRect.height)
+
+            renderer?.glassUniforms.backdropUVOffset = SIMD2<Float>(uvOffsetX, uvOffsetY)
+            renderer?.glassUniforms.backdropUVScale = SIMD2<Float>(uvScaleX, uvScaleY)
+        }
     }
 }
 

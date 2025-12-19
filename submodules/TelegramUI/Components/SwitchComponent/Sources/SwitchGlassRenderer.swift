@@ -39,6 +39,9 @@ public struct SwitchGlassUniforms {
     public var chromaticScaleY: Float = 0.25
     public var borderOuter: Float = 0
     public var borderInner: Float = 0
+    public var backdropUVOffset: SIMD2<Float> = .zero
+    public var backdropUVScale: SIMD2<Float> = SIMD2<Float>(1, 1)
+    public var uvOffset: SIMD2<Float> = .zero
 
     public init() {}
 }
@@ -136,5 +139,34 @@ public final class SwitchGlassRenderer: NSObject, MTKViewDelegate {
 
         cmdBuffer.present(drawable)
         cmdBuffer.commit()
+    }
+}
+
+extension SwitchGlassRenderer {
+
+    /// Updates uniforms based on backdrop capture rect
+    public func updateForBackdrop(unionRect: CGRect, glassFrame: CGRect, screenScale: CGFloat) {
+        glassUniforms.viewSize = SIMD2<Float>(
+            Float(unionRect.width * screenScale),
+            Float(unionRect.height * screenScale)
+        )
+
+        glassUniforms.glassOrigin = SIMD2<Float>(
+            Float((glassFrame.origin.x - unionRect.origin.x) * screenScale),
+            Float((glassFrame.origin.y - unionRect.origin.y) * screenScale)
+        )
+
+        glassUniforms.glassSize = SIMD2<Float>(
+            Float(glassFrame.width * screenScale),
+            Float(glassFrame.height * screenScale)
+        )
+    }
+
+    /// For switch/drag: offset UVs virtually without new capture
+    public func setVirtualOffset(_ offset: CGPoint, screenScale: CGFloat) {
+        glassUniforms.uvOffset = SIMD2<Float>(
+            Float(offset.x * screenScale),
+            Float(offset.y * screenScale)
+        )
     }
 }

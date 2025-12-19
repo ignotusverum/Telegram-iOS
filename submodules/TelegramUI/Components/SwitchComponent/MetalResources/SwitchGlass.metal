@@ -23,6 +23,9 @@ struct GlassUniforms {
     float  chromaticScaleY;
     float  borderOuter;
     float  borderInner;
+    float2 backdropUVOffset;
+    float2 backdropUVScale;
+    float2 uvOffset;  // For virtual positioning during drag
 };
 
 namespace SwitchGlassEffects {
@@ -90,7 +93,7 @@ float2 calculateRefractedUVSwitch(float2 uv, float2 towardEdgeDir, float2 viewSi
     return refractedUV;
 }
 
-float3 sampleWithChromaticAberrationSwitch(texture2d<float> tex, sampler s, float2 baseUV, float2 towardEdgeDir, float2 tangentDir, float2 viewSize, float chromaticAmount, float smearAmount) {
+float3 sampleWithChromaticAberrationSwitch(texture2d<float> tex, sampler s, float2 baseUV, float2 towardEdgeDir, float2 tangentDir, float2 viewSize, float chromaticAmount, float smearAmount, float2 backdropUVOffset, float2 backdropUVScale) {
     float2 chromaticOffset = towardEdgeDir * chromaticAmount / viewSize;
     float2 redUV = baseUV + chromaticOffset;
     float2 greenUV = baseUV;
@@ -104,9 +107,10 @@ float3 sampleWithChromaticAberrationSwitch(texture2d<float> tex, sampler s, floa
         float offset = (float(i) - 4.0) * smearAmount * SwitchGlassEffects::smearSpacing;
         float2 smearOffset = tangentDir * offset / viewSize;
 
-        float2 rUV = clamp(redUV + smearOffset, 0.001, 0.999);
-        float2 gUV = clamp(greenUV + smearOffset, 0.001, 0.999);
-        float2 bUV = clamp(blueUV + smearOffset, 0.001, 0.999);
+        // Transform local UVs to backdrop texture UVs before sampling
+        float2 rUV = clamp((redUV + smearOffset) * backdropUVScale + backdropUVOffset, 0.001, 0.999);
+        float2 gUV = clamp((greenUV + smearOffset) * backdropUVScale + backdropUVOffset, 0.001, 0.999);
+        float2 bUV = clamp((blueUV + smearOffset) * backdropUVScale + backdropUVOffset, 0.001, 0.999);
 
         float r = tex.sample(s, rUV).r;
         float g = tex.sample(s, gUV).g;
@@ -171,7 +175,7 @@ fragment float4 switchGlassFragment(
     const float kPaddingAmount = SwitchGlassEffects::paddingPercent;
 
     float2 pixelPos = in.texCoord * glass.viewSize;
-    float2 uv = in.texCoord;
+    float2 uv = in.texCoord + glass.uvOffset / glass.viewSize;
 
     float2 glassCenter = glass.glassOrigin + glass.glassSize * 0.5;
     float2 relativePos = pixelPos - glassCenter;
@@ -217,7 +221,8 @@ fragment float4 switchGlassFragment(
     float3 color = sampleWithChromaticAberrationSwitch(
         backdropTexture, linearSampler,
         refractedUV, towardEdgeDir, tangentDir,
-        glass.viewSize, chromatic, smear
+        glass.viewSize, chromatic, smear,
+        glass.backdropUVOffset, glass.backdropUVScale
     );
 
     color += calculateSwitchEdgeEffects(glassSdf, easedProximity, glass.edgeIntensity, relativePos, glass.borderOuter, glass.borderInner);
