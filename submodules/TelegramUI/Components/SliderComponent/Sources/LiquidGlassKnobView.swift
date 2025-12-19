@@ -1,5 +1,6 @@
 import UIKit
 import MetalKit
+import CustomLiquidGlass
 
 final class LiquidGlassKnobView: UIView {
 
@@ -67,9 +68,13 @@ final class LiquidGlassKnobView: UIView {
 
     private var metalView: MTKView?
     private var renderer: SliderGlassRenderer?
-    private var texturePool: SliderIOSurfaceTexturePool?
     private var hasValidBackdrop: Bool = false
     private var lastCapturedKnobX: CGFloat = -1000  // Track position for capture optimization
+
+    // MARK: - BackdropClient Support
+
+    private lazy var _backdropClientID = UUID()
+    private var _captureState: (metalHidden: Bool, collapsedHidden: Bool) = (true, true)
 
     // MARK: - Animators
 
@@ -143,6 +148,7 @@ final class LiquidGlassKnobView: UIView {
 
     deinit {
         displayLink?.invalidate()
+        BackdropCoordinator.shared.unregister(self)
     }
 
     // MARK: - Setup
@@ -202,7 +208,8 @@ final class LiquidGlassKnobView: UIView {
         addSubview(mtkView)
         self.metalView = mtkView
         self.renderer = glassRenderer
-        self.texturePool = SliderIOSurfaceTexturePool(device: device)
+
+        BackdropCoordinator.shared.register(self)
     }
 
     private func setupAnimators() {
@@ -281,10 +288,12 @@ final class LiquidGlassKnobView: UIView {
         if willBeExpanded && isExpanded {
             let moveThreshold: CGFloat = 2.0  // Only recapture if moved more than 2pt
             if abs(knobCenterX - lastCapturedKnobX) > moveThreshold || !hasValidBackdrop {
-                captureBackdrop()
+                BackdropCoordinator.shared.setNeedsCapture()
                 lastCapturedKnobX = knobCenterX
             }
         }
+
+        BackdropCoordinator.shared.captureIfNeeded()
 
         if !scaleSettled || !wobbleSettled || isExpanded {
             updateLayout()
@@ -299,7 +308,7 @@ final class LiquidGlassKnobView: UIView {
         isExpanded = true
 
         lastCapturedKnobX = knobCenterX
-        captureBackdrop()
+        BackdropCoordinator.shared.setNeedsCapture()
         scaleAnimator.target = Constants.expandedScale
         wobbleAnimator.triggerLift()
     }
@@ -324,60 +333,6 @@ final class LiquidGlassKnobView: UIView {
     /// Handle pan gesture directly to track velocity (like original)
     func handlePan(_ gesture: UIPanGestureRecognizer, in view: UIView) {
         wobbleAnimator.handlePan(gesture, in: view)
-    }
-
-    // MARK: - Backdrop Capture
-
-    func captureBackdrop() {
-        // Find the best view to capture from - go up hierarchy to find a substantial container
-        guard let pool = texturePool,
-              bounds.width > 0 && bounds.height > 0 else {
-            return
-        }
-
-        // Go up the view hierarchy to find a good capture source
-        // This ensures we capture the full background, not just immediate parent
-        var captureView: UIView? = superview
-        var depth = 0
-        while let parent = captureView?.superview, depth < 3 {
-            captureView = parent
-            depth += 1
-        }
-
-        guard let targetView = captureView else { return }
-
-        let scale = metalView?.contentScaleFactor ?? UIScreen.main.scale
-        let capture = captureRect
-
-        guard let context = pool.getContext(size: capture.size, scale: scale) else {
-            return
-        }
-
-        pool.lockForCPU()
-
-        let captureRectInTarget = convert(capture, to: targetView)
-
-        // Hide our views during capture
-        metalView?.isHidden = true
-        collapsedKnobView.isHidden = true
-
-        context.saveGState()
-        context.translateBy(x: -captureRectInTarget.origin.x * scale, y: -captureRectInTarget.origin.y * scale)
-        context.scaleBy(x: scale, y: scale)
-        targetView.layer.render(in: context)
-        context.restoreGState()
-
-        // Restore visibility using staggered thresholds
-        let thumbScale = currentScale
-        let showMetal = thumbScale > Constants.metalThreshold && hasValidBackdrop
-        metalView?.isHidden = !showMetal
-        let showGray = thumbScale < Constants.grayThreshold
-        collapsedKnobView.isHidden = !showGray
-
-        pool.unlockForCPU()
-
-        renderer?.backdropTexture = pool.getTexture()
-        hasValidBackdrop = true
     }
 
     // MARK: - Uniforms Update
@@ -457,5 +412,54 @@ final class LiquidGlassKnobView: UIView {
         } else {
             layer.shadowPath = nil
         }
+    }
+}
+
+// MARK: - BackdropClient
+
+extension LiquidGlassKnobView: BackdropClient {
+
+    public var backdropClientID: UUID {
+        _backdropClientID
+    }
+
+    public var captureFrame: CGRect {
+        guard let window = window else { return .zero }
+        return convert(captureRect, to: window)
+    }
+
+    public var capturePadding: CGFloat {
+        Constants.capturePadding
+    }
+
+    public var needsBackdrop: Bool {
+        isExpanded
+    }
+
+    public var backdropWindow: UIWindow? {
+        window
+    }
+
+    public func prepareForCapture() {
+        _captureState = (
+            metalHidden: metalView?.isHidden ?? true,
+            collapsedHidden: collapsedKnobView.isHidden
+        )
+        metalView?.isHidden = true
+        collapsedKnobView.isHidden = true
+    }
+
+    public func restoreAfterCapture() {
+        // Restore visibility using staggered thresholds
+        let thumbScale = currentScale
+        let showMetal = thumbScale > Constants.metalThreshold && hasValidBackdrop
+        metalView?.isHidden = !showMetal
+        let showGray = thumbScale < Constants.grayThreshold
+        collapsedKnobView.isHidden = !showGray
+    }
+
+    public func didReceiveBackdrop(_ texture: MTLTexture, unionRect: CGRect, screenScale: CGFloat) {
+        renderer?.backdropTexture = texture
+        hasValidBackdrop = true
     }
 }

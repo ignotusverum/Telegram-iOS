@@ -1,5 +1,6 @@
 import UIKit
 import MetalKit
+import CustomLiquidGlass
 
 private final class LiquidGlassSwitchViewLayer: CALayer {
     override func setNeedsDisplay() {
@@ -65,8 +66,12 @@ public final class LiquidGlassSwitchView: UIControl {
     private var metalContainerView: UIView!
     private var metalView: MTKView?
     private var renderer: SwitchGlassRenderer?
-    private var texturePool: SwitchIOSurfaceTexturePool?
     private var hasValidBackdrop: Bool = false
+
+    // MARK: - BackdropClient Support
+
+    private lazy var _backdropClientID = UUID()
+    private var _captureState: (metalHidden: Bool, thumbHidden: Bool) = (true, true)
 
     // MARK: - Animation
 
@@ -119,6 +124,7 @@ public final class LiquidGlassSwitchView: UIControl {
 
     deinit {
         displayLink?.invalidate()
+        BackdropCoordinator.shared.unregister(self)
     }
 
     // MARK: - Setup
@@ -191,7 +197,8 @@ public final class LiquidGlassSwitchView: UIControl {
 
         metalContainerView.addSubview(mtkView)
         self.metalView = mtkView
-        self.texturePool = SwitchIOSurfaceTexturePool(device: device)
+
+        BackdropCoordinator.shared.register(self)
     }
 
     private func setupGestures() {
@@ -339,9 +346,11 @@ public final class LiquidGlassSwitchView: UIControl {
         let wobbleSettled = wobbleAnimator.isSettled
 
         let willBeExpanded = thumbScaleAnimator.current > Constants.expandedThreshold
-        if willBeExpanded {
-            captureBackdropSnapshot()
+        if willBeExpanded && !hasValidBackdrop {
+            BackdropCoordinator.shared.setNeedsCapture()
         }
+
+        BackdropCoordinator.shared.captureIfNeeded()
 
         if !positionSettled || !scaleSettled || !wobbleSettled {
             updateThumbFrame()
@@ -464,39 +473,51 @@ public final class LiquidGlassSwitchView: UIControl {
         renderer.glassUniforms.refractionScaleY = 0.5
     }
 
-    // MARK: - Backdrop Capture
+}
 
-    private func captureBackdropSnapshot() {
-        guard let superview = superview,
-              let pool = texturePool,
-              bounds.width > 0 && bounds.height > 0 else { return }
+// MARK: - BackdropClient
 
-        let scale = metalView?.contentScaleFactor ?? UIScreen.main.scale
-        let captureArea = captureRect
+extension LiquidGlassSwitchView: BackdropClient {
 
-        guard let context = pool.getContext(size: captureArea.size, scale: scale) else { return }
+    public var backdropClientID: UUID {
+        _backdropClientID
+    }
 
-        pool.lockForCPU()
+    public var captureFrame: CGRect {
+        guard let window = window else { return .zero }
+        return convert(captureRect, to: window)
+    }
 
-        let captureRectInSuperview = convert(captureArea, to: superview)
+    public var capturePadding: CGFloat {
+        Constants.capturePadding
+    }
 
+    public var needsBackdrop: Bool {
+        thumbScaleAnimator.current > Constants.expandedThreshold
+    }
+
+    public var backdropWindow: UIWindow? {
+        window
+    }
+
+    public func prepareForCapture() {
+        _captureState = (
+            metalHidden: metalContainerView?.isHidden ?? true,
+            thumbHidden: thumbBackground?.isHidden ?? true
+        )
         metalContainerView?.isHidden = true
         thumbBackground?.isHidden = true
+    }
 
-        context.saveGState()
-        context.translateBy(x: -captureRectInSuperview.origin.x * scale, y: -captureRectInSuperview.origin.y * scale)
-        context.scaleBy(x: scale, y: scale)
-        superview.layer.render(in: context)
-        context.restoreGState()
-
+    public func restoreAfterCapture() {
         let thumbScale = thumbScaleAnimator.current
         let isExpanded = thumbScale > Constants.expandedThreshold
         metalContainerView?.isHidden = !(isExpanded && hasValidBackdrop)
         thumbBackground?.isHidden = thumbScale >= Constants.grayThreshold
+    }
 
-        pool.unlockForCPU()
-
-        renderer?.backdropTexture = pool.getTexture()
+    public func didReceiveBackdrop(_ texture: MTLTexture, unionRect: CGRect, screenScale: CGFloat) {
+        renderer?.backdropTexture = texture
         hasValidBackdrop = true
     }
 }

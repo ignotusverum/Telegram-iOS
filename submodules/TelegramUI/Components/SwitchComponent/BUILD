@@ -58,6 +58,7 @@ swift_library(
         "//submodules/ContextUI:ContextUI",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
         "//submodules/ComponentFlow:ComponentFlow",
+        "//submodules/CustomLiquidGlass",
     ],
     visibility = [
         "//visibility:public",
