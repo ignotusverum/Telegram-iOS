@@ -50,8 +50,6 @@ public final class BackdropCoordinator {
     }
 
     private func capture() {
-        cleanupStaleClients()
-
         let activeClients = clients.values.compactMap { $0.client }.filter { $0.needsBackdrop }
         guard !activeClients.isEmpty else { return }
 
@@ -103,6 +101,8 @@ public final class BackdropCoordinator {
     }
 
     private func cleanupStaleClients() {
-        clients = clients.filter { $0.value.client != nil }
+        for key in clients.keys where clients[key]?.client == nil {
+            clients.removeValue(forKey: key)
+        }
     }
 }
