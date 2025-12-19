@@ -1,17 +1,17 @@
 import UIKit
 import simd
 
-final class LegacyWobbleAnimator {
+public final class LegacyWobbleAnimator {
 
-    private(set) var horizontalValue: CGFloat = 0
-    private(set) var verticalValue: CGFloat = 0
-    var value: CGFloat { horizontalValue }
+    public private(set) var horizontalValue: CGFloat = 0
+    public private(set) var verticalValue: CGFloat = 0
+    public var value: CGFloat { horizontalValue }
 
-    var normalizedVelocity: SIMD2<Float> {
+    public var normalizedVelocity: SIMD2<Float> {
         SIMD2<Float>(Float(horizontalValue), Float(verticalValue))
     }
 
-    var isSettled: Bool {
+    public var isSettled: Bool {
         abs(horizontalValue) < 0.001 &&
         abs(verticalValue) < 0.001 &&
         abs(velocity.x) < 1.0 &&
@@ -21,37 +21,39 @@ final class LegacyWobbleAnimator {
     private var velocity: CGPoint = .zero
     private var targetVelocity: CGPoint = .zero
 
-    var surfaceTension: CGFloat = 180.0
-    var viscosity: CGFloat = 12.0
-    var inertia: CGFloat = 0.8
-    var maxDeform: CGFloat = 0.2
-    var velocityScale: CGFloat = 0.0008
-    var idleTimeout: CGFloat = 0.3
+    public var surfaceTension: CGFloat = 180.0
+    public var viscosity: CGFloat = 12.0
+    public var inertia: CGFloat = 0.8
+    public var maxDeform: CGFloat = 0.2
+    public var velocityScale: CGFloat = 0.0008
+    public var idleTimeout: CGFloat = 0.3
 
     private var lastVelocityTrackTime: CFTimeInterval = 0
 
-    func trackVelocity(_ v: CGPoint) {
+    public init() {}
+
+    public func trackVelocity(_ v: CGPoint) {
         targetVelocity = v
         lastVelocityTrackTime = CACurrentMediaTime()
     }
 
-    func trackVelocity(_ v: CGFloat) {
+    public func trackVelocity(_ v: CGFloat) {
         trackVelocity(CGPoint(x: v, y: 0))
     }
 
-    func release() {
+    public func release() {
         targetVelocity = .zero
     }
 
-    func triggerLift() {
+    public func triggerLift() {
         velocity.y -= 800
     }
 
-    func triggerDrop() {
+    public func triggerDrop() {
         velocity.y += 600
     }
 
-    func reset() {
+    public func reset() {
         horizontalValue = 0
         verticalValue = 0
         velocity = .zero
@@ -59,7 +61,7 @@ final class LegacyWobbleAnimator {
         lastVelocityTrackTime = 0
     }
 
-    func update(dt: CGFloat) {
+    public func update(dt: CGFloat) {
         // Auto-release if idle for too long
         if lastVelocityTrackTime > 0 {
             let timeSinceLastTrack = CACurrentMediaTime() - lastVelocityTrackTime

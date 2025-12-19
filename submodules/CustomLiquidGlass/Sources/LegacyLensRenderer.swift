@@ -8,7 +8,7 @@ private func metalLibrary(device: MTLDevice) -> MTLLibrary? {
     }
 
     let mainBundle = Bundle(for: LegacyLensRenderer.self)
-    guard let path = mainBundle.path(forResource: "LiquidLensBundle", ofType: "bundle") else {
+    guard let path = mainBundle.path(forResource: "CustomLiquidGlassBundle", ofType: "bundle") else {
         return nil
     }
     guard let bundle = Bundle(path: path) else {
@@ -22,50 +22,56 @@ private func metalLibrary(device: MTLDevice) -> MTLLibrary? {
     return library
 }
 
-struct LegacyGlassUniforms {
-    var viewSize: SIMD2<Float> = .zero
-    var glassOrigin: SIMD2<Float> = .zero
-    var glassSize: SIMD2<Float> = .zero
-    var cornerRadius: Float = 0
-    var refractionStrength: Float = 6
-    var specularIntensity: Float = 0.2
-    var refractionZonePercent: Float = 0.4
-    var scrollVelocity: SIMD2<Float> = .zero
-    var time: Float = 0
-    var edgeIntensity: Float = 0.8
-    var refractionScaleX: Float = 1.0
-    var refractionScaleY: Float = 0.5
-    var chromaticScaleX: Float = 1.0
-    var chromaticScaleY: Float = 0.25
+public struct LegacyGlassUniforms {
+    public var viewSize: SIMD2<Float> = .zero
+    public var glassOrigin: SIMD2<Float> = .zero
+    public var glassSize: SIMD2<Float> = .zero
+    public var cornerRadius: Float = 0
+    public var refractionStrength: Float = 6
+    public var specularIntensity: Float = 0.2
+    public var refractionZonePercent: Float = 0.4
+    public var scrollVelocity: SIMD2<Float> = .zero
+    public var time: Float = 0
+    public var edgeIntensity: Float = 0.8
+    public var refractionScaleX: Float = 1.0
+    public var refractionScaleY: Float = 0.5
+    public var chromaticScaleX: Float = 1.0
+    public var chromaticScaleY: Float = 0.25
+
+    public init() {}
 }
 
 // EXACTLY matches SdfUniforms in original shader
-struct LegacySdfUniforms {
-    var position: SIMD2<Float> = .zero
-    var size: SIMD2<Float> = .zero
-    var intensity: Float = 0
-    var _padding: Float = 0
+public struct LegacySdfUniforms {
+    public var position: SIMD2<Float> = .zero
+    public var size: SIMD2<Float> = .zero
+    public var intensity: Float = 0
+    public var _padding: Float = 0
+
+    public init() {}
 }
 
 // EXACTLY matches TabUniforms in original shader
-struct LegacyTabUniforms {
-    var positions: (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>,
+public struct LegacyTabUniforms {
+    public var positions: (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>,
                     SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>) =
         (.zero, .zero, .zero, .zero, .zero, .zero, .zero, .zero)
-    var sizes: (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>,
+    public var sizes: (SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>,
                 SIMD2<Float>, SIMD2<Float>, SIMD2<Float>, SIMD2<Float>) =
         (.zero, .zero, .zero, .zero, .zero, .zero, .zero, .zero)
-    var deformX: (Float, Float, Float, Float, Float, Float, Float, Float) =
+    public var deformX: (Float, Float, Float, Float, Float, Float, Float, Float) =
         (0, 0, 0, 0, 0, 0, 0, 0)
-    var fillAlpha: (Float, Float, Float, Float, Float, Float, Float, Float) =
+    public var fillAlpha: (Float, Float, Float, Float, Float, Float, Float, Float) =
         (0, 0, 0, 0, 0, 0, 0, 0)
-    var count: Int32 = 0
-    var selectedIndex: Int32 = 0
-    var fillRadius: Float = 0
-    var fillOpacity: Float = 0
+    public var count: Int32 = 0
+    public var selectedIndex: Int32 = 0
+    public var fillRadius: Float = 0
+    public var fillOpacity: Float = 0
+
+    public init() {}
 }
 
-final class LegacyLensRenderer: NSObject, MTKViewDelegate {
+public final class LegacyLensRenderer: NSObject, MTKViewDelegate {
 
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
@@ -77,19 +83,19 @@ final class LegacyLensRenderer: NSObject, MTKViewDelegate {
     private var sdf2Buffer: MTLBuffer?
     private var tabsBuffer: MTLBuffer?
 
-    var backdropTexture: MTLTexture? {
+    public var backdropTexture: MTLTexture? {
         didSet { hasValidBackdrop = backdropTexture != nil }
     }
-    private(set) var hasValidBackdrop: Bool = false
+    public private(set) var hasValidBackdrop: Bool = false
 
-    var glassUniforms = LegacyGlassUniforms()
+    public var glassUniforms = LegacyGlassUniforms()
     private var sdf1Uniforms = LegacySdfUniforms()
     private var sdf2Uniforms = LegacySdfUniforms()
     private var tabUniforms = LegacyTabUniforms()
 
-    var onUpdate: (() -> Void)?
+    public var onUpdate: (() -> Void)?
 
-    init?(device: MTLDevice) {
+    public init?(device: MTLDevice) {
         self.device = device
         guard let queue = device.makeCommandQueue() else { return nil }
         self.commandQueue = queue
@@ -135,9 +141,9 @@ final class LegacyLensRenderer: NSObject, MTKViewDelegate {
         samplerState = device.makeSamplerState(descriptor: desc)
     }
 
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
-    func draw(in view: MTKView) {
+    public func draw(in view: MTKView) {
         onUpdate?()
 
         guard hasValidBackdrop,

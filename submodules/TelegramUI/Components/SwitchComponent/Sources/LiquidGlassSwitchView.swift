@@ -358,7 +358,11 @@ public final class LiquidGlassSwitchView: UIControl {
         let wobbleSettled = wobbleAnimator.isSettled
 
         let willBeExpanded = thumbScaleAnimator.current > Constants.expandedThreshold
-        if willBeExpanded && !hasValidBackdrop {
+        let isPositionAnimating = !positionAnimator.isSettled
+        // Request capture while expanded AND position/track is animating (track color changes)
+        if willBeExpanded && isPositionAnimating {
+            BackdropCoordinator.shared.setNeedsCapture()
+        } else if willBeExpanded && !hasValidBackdrop {
             BackdropCoordinator.shared.setNeedsCapture()
         }
 

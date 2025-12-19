@@ -282,7 +282,10 @@ final class LiquidGlassKnobView: UIView {
         let scaleSettled = scaleAnimator.isSettled
         let wobbleSettled = wobbleAnimator.isSettled
 
-        // Capture is triggered in expand(), coordinator handles it
+        // Request continuous capture while expanded (track fill changes as knob moves)
+        if isExpanded {
+            BackdropCoordinator.shared.setNeedsCapture()
+        }
         BackdropCoordinator.shared.captureIfNeeded()
 
         if !scaleSettled || !wobbleSettled || isExpanded {
@@ -305,7 +308,6 @@ final class LiquidGlassKnobView: UIView {
     func collapse() {
         guard isExpanded else { return }
         isExpanded = false
-        hasValidBackdrop = false  // Reset so next expand will re-capture
 
         scaleAnimator.target = Constants.collapsedScale
         wobbleAnimator.triggerDrop()

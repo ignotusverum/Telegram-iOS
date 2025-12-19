@@ -1,21 +1,23 @@
 import UIKit
 
-final class LegacyScaleAnimator {
+public final class LegacyScaleAnimator {
 
-    private(set) var current: CGFloat = 0.0
-    var target: CGFloat = 0.0
+    public private(set) var current: CGFloat = 0.0
+    public var target: CGFloat = 0.0
 
     private var velocity: CGFloat = 0.0
     private var lastTime: CFTimeInterval = 0
 
-    var stiffness: CGFloat = 400.0
-    var damping: CGFloat = 28.0
+    public var stiffness: CGFloat = 400.0
+    public var damping: CGFloat = 28.0
 
-    var isSettled: Bool {
+    public var isSettled: Bool {
         abs(current - target) < 0.001 && abs(velocity) < 0.01
     }
 
-    func step() {
+    public init() {}
+
+    public func step() {
         let now = CACurrentMediaTime()
 
         let dt: CGFloat
@@ -35,7 +37,7 @@ final class LegacyScaleAnimator {
         current += velocity * dt
     }
 
-    func setValue(_ value: CGFloat, animated: Bool) {
+    public func setValue(_ value: CGFloat, animated: Bool) {
         target = value
         if !animated {
             current = value
@@ -44,14 +46,14 @@ final class LegacyScaleAnimator {
         }
     }
 
-    func reset() {
+    public func reset() {
         current = 0.0
         target = 0.0
         velocity = 0
         lastTime = 0
     }
 
-    func resetTiming() {
+    public func resetTiming() {
         lastTime = 0
     }
 }
