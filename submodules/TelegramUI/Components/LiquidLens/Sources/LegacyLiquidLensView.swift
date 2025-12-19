@@ -1,6 +1,6 @@
 import UIKit
 import MetalKit
-import IOSurface
+import CustomLiquidGlass
 
 public final class LegacyLiquidLensView: UIView {
 
@@ -118,8 +118,11 @@ public final class LegacyLiquidLensView: UIView {
     private var metalContainerView: UIView?
     private var metalView: MTKView?
     private var renderer: LegacyLensRenderer?
-    private var texturePool: IOSurfaceTexturePool?
     private var displayLink: CADisplayLink?
+
+    // BackdropClient support
+    private lazy var _backdropClientID = UUID()
+    private var _captureState: (metalHidden: Bool, restingHidden: Bool, mask: UIView?) = (true, true, nil)
 
     private var isAnimating: Bool {
         !liftAnimator.isSettled ||
@@ -183,8 +186,6 @@ public final class LegacyLiquidLensView: UIView {
         self.renderer = renderer
         mtkView.delegate = renderer
         renderer.onUpdate = { [weak self] in self?.update() }
-
-        texturePool = IOSurfaceTexturePool(device: device)
     }
 
     private func applyAnimatorConfig() {
@@ -213,8 +214,13 @@ public final class LegacyLiquidLensView: UIView {
     public func activate() {
         guard !isActivated else { return }
         isActivated = true
-        captureBackdrop()
+        BackdropCoordinator.shared.register(self)
+        BackdropCoordinator.shared.setNeedsCapture()
         startDisplayLink()
+    }
+
+    deinit {
+        BackdropCoordinator.shared.unregister(self)
     }
 
     public func setLifted(
@@ -320,7 +326,7 @@ public final class LegacyLiquidLensView: UIView {
         fillScaleAnimator.target = 0.9
         fillDeformAnimator.setValue(0, animated: false)
         wobbleAnimator.triggerLift()
-        captureBackdrop()
+        BackdropCoordinator.shared.setNeedsCapture()
         liftAnimator.setValue(config.expandedScale, animated: animated)
         startDisplayLink()
     }
@@ -556,45 +562,6 @@ public final class LegacyLiquidLensView: UIView {
         }
     }
 
-    private func captureBackdrop() {
-        guard let texturePool = texturePool,
-              let window = window,
-              let containerView = liftedContainerView else { return }
-
-        let screenScale = window.screen.scale
-        let containerInWindow = containerView.convert(containerView.bounds, to: window)
-        captureRectInWindow = containerInWindow.insetBy(dx: -config.capturePadding, dy: -config.capturePadding)
-        captureRect = CGRect(origin: .zero, size: captureRectInWindow.size)
-
-        // Hide Metal container and resting background - keep liftedContentView VISIBLE for glass effect
-        let metalWasHidden = metalContainerView?.isHidden ?? true
-        let restingWasHidden = restingBackgroundView.isHidden
-        let savedMask = liftedContentView?.mask  // Save mask so all blue icons are captured
-        metalContainerView?.isHidden = true
-        restingBackgroundView.isHidden = true
-        liftedContentView?.mask = nil  // Remove mask during capture to capture ALL blue icons
-        defer {
-            metalContainerView?.isHidden = metalWasHidden
-            restingBackgroundView.isHidden = restingWasHidden
-            liftedContentView?.mask = savedMask  // Restore mask
-        }
-
-        texturePool.lockForCPU()
-        defer { texturePool.unlockForCPU() }
-
-        if let ctx = texturePool.getContext(size: captureRect.size, scale: screenScale) {
-            ctx.saveGState()
-            ctx.translateBy(x: -captureRectInWindow.origin.x * screenScale, y: -captureRectInWindow.origin.y * screenScale)
-            ctx.scaleBy(x: screenScale, y: screenScale)
-            window.layer.render(in: ctx)
-            ctx.restoreGState()
-        }
-
-        renderer?.backdropTexture = texturePool.getTexture()
-        hasValidBackdrop = true
-        updateMetalFrame()
-    }
-
     private func startDisplayLink() {
         guard displayLink == nil else { return }
 
@@ -614,6 +581,58 @@ public final class LegacyLiquidLensView: UIView {
     }
 
     @objc private func tick() {
+        BackdropCoordinator.shared.captureIfNeeded()
         metalView?.draw()
+    }
+}
+
+// MARK: - BackdropClient
+
+extension LegacyLiquidLensView: BackdropClient {
+
+    public var backdropClientID: UUID {
+        _backdropClientID
+    }
+
+    public var captureFrame: CGRect {
+        guard let window = window, let container = liftedContainerView else { return .zero }
+        return container.convert(container.bounds, to: window)
+    }
+
+    public var capturePadding: CGFloat {
+        config.capturePadding
+    }
+
+    public var needsBackdrop: Bool {
+        isLifted || isAnimating
+    }
+
+    public var backdropWindow: UIWindow? {
+        window
+    }
+
+    public func prepareForCapture() {
+        _captureState = (
+            metalHidden: metalContainerView?.isHidden ?? true,
+            restingHidden: restingBackgroundView.isHidden,
+            mask: liftedContentView?.mask
+        )
+        metalContainerView?.isHidden = true
+        restingBackgroundView.isHidden = true
+        liftedContentView?.mask = nil
+    }
+
+    public func restoreAfterCapture() {
+        metalContainerView?.isHidden = _captureState.metalHidden
+        restingBackgroundView.isHidden = _captureState.restingHidden
+        liftedContentView?.mask = _captureState.mask
+    }
+
+    public func didReceiveBackdrop(_ texture: MTLTexture, unionRect: CGRect, screenScale: CGFloat) {
+        captureRectInWindow = unionRect
+        captureRect = CGRect(origin: .zero, size: unionRect.size)
+        renderer?.backdropTexture = texture
+        hasValidBackdrop = true
+        updateMetalFrame()
     }
 }
