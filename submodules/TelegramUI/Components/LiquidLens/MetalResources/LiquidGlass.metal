@@ -1,6 +1,11 @@
 #include <metal_stdlib>
 using namespace metal;
 
+typedef half  scalar_t;
+typedef half2 vec2_t;
+typedef half3 vec3_t;
+typedef half4 vec4_t;
+
 struct VertexOut {
     float4 position [[position]];
     float2 texCoord;
@@ -41,229 +46,200 @@ struct TabUniforms {
     float  fillOpacity;
 };
 
-namespace GlassEffects {
-    constant float airRefractiveIndex = 1.0;
-    constant float glassRefractiveIndex = 1.5;
-    constant float proximityEasing = 0.6;
-    constant float incidentAngleMultiplier = 1.4;
-    constant float refractionMultiplier = 12.0;
-    constant float paddingPercent = 0.08;
-
+namespace Glass {
+    constant scalar_t refractiveRatio = scalar_t(1.0 / 1.5);
+    constant scalar_t proximityEasing = scalar_t(0.6);
+    constant scalar_t incidentAngleMultiplier = scalar_t(1.4);
+    constant scalar_t refractionMultiplier = scalar_t(12.0);
+    constant scalar_t paddingPercent = scalar_t(0.08);
     constant float smearPercent = 0.025;
     constant float chromaticPercent = 0.1;
-    constant float smearSpacing = 0.5;
-
-    constant float fresnelExponent = 2.5;
-    constant float fresnelIntensity = 0.25;
-    constant float edgeMaskWidth = 6.0;
-    constant float edgeMaskIntensity = 0.25;
-    constant float borderOuter = 2.0;
-    constant float borderInner = 1.0;
-    constant float borderIntensity = 0.6;
-
-    constant float fillTransitionOuter = 10.0;
-    constant float fillTransitionInner = -5.0;
-    constant float3 fillTint = float3(0.3, 0.3, 0.4);
-    constant float fillOpacity = 0.6;
-
-    constant float specularExp1 = 1.5;
-    constant float specularWeight1 = 0.7;
-    constant float specularExp2 = 3.0;
-    constant float specularWeight2 = 1.0;
-    constant float baseGlowExp = 2.0;
-    constant float baseGlowIntensity = 1.0;
-    constant float rimIntensity = 0.8;
-    constant float specularMultiplier = 0.8;
-
-    constant float glassAlphaSharpness = 32.0;
-    constant float sdfAlphaSharpness = 8.0;
+    constant scalar_t smearSpacing = scalar_t(0.5);
+    constant scalar_t fresnelExponent = scalar_t(2.5);
+    constant scalar_t fresnelIntensity = scalar_t(0.25);
+    constant scalar_t edgeMaskWidth = scalar_t(6.0);
+    constant scalar_t edgeMaskIntensity = scalar_t(0.25);
+    constant scalar_t borderOuter = scalar_t(2.0);
+    constant scalar_t borderInner = scalar_t(1.0);
+    constant scalar_t borderIntensity = scalar_t(0.6);
+    constant scalar_t fillTransitionOuter = scalar_t(10.0);
+    constant scalar_t fillTransitionInner = scalar_t(-5.0);
+    constant scalar_t fillOpacity = scalar_t(0.6);
+    constant scalar_t specularExp = scalar_t(2.0);
+    constant scalar_t specularWeight = scalar_t(1.0);
+    constant scalar_t baseGlowIntensity = scalar_t(1.0);
+    constant scalar_t glassAlphaSharpness = scalar_t(32.0);
+    constant scalar_t sdfAlphaSharpness = scalar_t(8.0);
     constant float sdfBlendMinK = 20.0;
     constant float sdfBlendFactor = 0.8;
-
-    constant float unselectedFillOuter = 5.0;
-    constant float unselectedFillInner = -10.0;
-    constant float3 unselectedTint = float3(0.1);
+    constant scalar_t unselectedFillOuter = scalar_t(5.0);
+    constant scalar_t unselectedFillInner = scalar_t(-10.0);
+    constant float2 diagonalDir = float2(0.7071067811865476);
 }
 
-float sdRoundedRect(float2 pos, float2 halfSize, float radius) {
+inline float sdRoundedRect(float2 pos, float2 halfSize, float radius) {
     radius = min(radius, min(halfSize.x, halfSize.y));
     float2 q = abs(pos) - halfSize + radius;
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
 }
 
-float sdSquashStretch(float2 pos, float2 halfSize, float cornerRadius, float velocityX, float deformAmount) {
-    float widthMult  = 1.0 - velocityX * deformAmount;
-    float heightMult = 1.0 + velocityX * deformAmount * 0.75;
-
-    widthMult  = clamp(widthMult, 0.82, 1.18);
-    heightMult = clamp(heightMult, 0.82, 1.18);
-
-    float2 deformedHalfSize = float2(halfSize.x * widthMult, halfSize.y * heightMult);
-
-    float offset = halfSize.x * (widthMult - 1.0) * 0.15;
-    float2 adjustedPos = pos - float2(offset, 0.0);
-
+inline float sdSquashStretch(float2 pos, float2 halfSize, float velocityX, float deformAmount) {
+    float deform = velocityX * deformAmount;
+    float widthMult  = clamp(1.0 - deform, 0.82, 1.18);
+    float heightMult = clamp(fma(deform, 0.75, 1.0), 0.82, 1.18);
+    float2 deformedHalfSize = halfSize * float2(widthMult, heightMult);
+    float2 adjustedPos = pos - float2(halfSize.x * (widthMult - 1.0) * 0.15, 0.0);
     float radius = min(deformedHalfSize.x, deformedHalfSize.y);
     float2 q = abs(adjustedPos) - deformedHalfSize + radius;
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;
 }
 
-float smin(float a, float b, float k) {
-    float h = saturate(0.5 + 0.5 * (b - a) / k);
-    return mix(b, a, h) - k * h * (1.0 - h);
+inline float smin(float a, float b, float k) {
+    float h = saturate(fma(0.5, (b - a) / k, 0.5));
+    return fma(-k * h, 1.0 - h, mix(b, a, h));
 }
 
-float sdSquircle(float2 pos, float2 size, float n) {
-    float2 d = abs(pos) / size;
-    float dist = pow(pow(d.x, n) + pow(d.y, n), 1.0 / n);
-    float interior = dist - 1.0;
-    return interior * min(size.x, size.y);
+inline float2 calculateRefractedUV(float2 uv, float2 towardEdgeDir, float2 invViewSize, scalar_t proximity, scalar_t refractionStrength) {
+    scalar_t easedProximity = pow(proximity, Glass::proximityEasing);
+    scalar_t incidentAngle = proximity * Glass::incidentAngleMultiplier;
+    scalar_t sinTheta2 = clamp(Glass::refractiveRatio * sin(incidentAngle), scalar_t(-1.0), scalar_t(1.0));
+    scalar_t bendAmount = incidentAngle - asin(sinTheta2);
+    scalar_t strength = bendAmount * refractionStrength * Glass::refractionMultiplier * easedProximity;
+    float totalOffset = float(fma(Glass::paddingPercent, easedProximity, strength));
+    return fma(-towardEdgeDir, invViewSize * totalOffset, uv);
 }
 
-float calculateSdf(float2 pixelPos, constant SdfUniforms &sdf) {
-    if (sdf.size.y <= 0.0) return 10000.0;
-    float2 pos = pixelPos - sdf.position;
-    float cornerRadius = sdf.size.y;
-    return sdRoundedRect(pos, sdf.size, cornerRadius);
-}
+vec3_t sampleWithChromaticAberration(
+    texture2d<float> tex,
+    sampler s,
+    float2 baseUV,
+    float2 chromaticDir,
+    float2 smearDir,
+    float chromaticAmount,
+    float smearAmount
+) {
+    float2 chromOffset = chromaticDir * chromaticAmount;
+    float smearStep = smearAmount * float(Glass::smearSpacing);
 
-float snellRefract(float sinTheta1, float n1, float n2) {
-    float ratio = n1 / n2;
-    float sinTheta2 = ratio * sinTheta1;
-    return clamp(sinTheta2, -1.0, 1.0);
-}
+    vec3_t color = vec3_t(0.0);
+    float2 smear;
 
-float2 calculateRefractedUV(float2 uv, float2 towardEdgeDir, float2 viewSize, float proximity, float refractionStrength, float refractionMultiplier, float paddingAmount) {
-    float easedProximity = pow(proximity, GlassEffects::proximityEasing);
-    float incidentAngle = proximity * GlassEffects::incidentAngleMultiplier;
-    float sinTheta1 = sin(incidentAngle);
-    float sinTheta2 = snellRefract(sinTheta1, GlassEffects::airRefractiveIndex, GlassEffects::glassRefractiveIndex);
-    float theta2 = asin(sinTheta2);
-    float bendAmount = incidentAngle - theta2;
+    smear = smearDir * (-4.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.028);
 
-    float strength = bendAmount * refractionStrength * refractionMultiplier * easedProximity;
-    float2 refractedUV = uv - (towardEdgeDir / viewSize) * strength;
-    refractedUV -= (towardEdgeDir / viewSize) * paddingAmount * easedProximity;
+    smear = smearDir * (-3.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.066);
 
-    return refractedUV;
-}
+    smear = smearDir * (-2.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.121);
 
-float3 sampleWithChromaticAberration(texture2d<float> tex, sampler s, float2 baseUV, float2 towardEdgeDir, float2 tangentDir, float2 viewSize, float chromaticAmount, float smearAmount) {
-    float2 chromaticOffset = towardEdgeDir * chromaticAmount / viewSize;
-    float2 redUV = baseUV + chromaticOffset;
-    float2 greenUV = baseUV;
-    float2 blueUV = baseUV - chromaticOffset;
+    smear = smearDir * (-1.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.176);
 
-    const int kSamples = 9;
-    float weights[9] = { 0.028, 0.066, 0.121, 0.176, 0.199, 0.176, 0.121, 0.066, 0.028 };
-    float3 color = float3(0.0);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.199);
 
-    for (int i = 0; i < kSamples; i++) {
-        float offset = (float(i) - 4.0) * smearAmount * GlassEffects::smearSpacing;
-        float2 smearOffset = tangentDir * offset / viewSize;
+    smear = smearDir * (1.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.176);
 
-        float2 rUV = clamp(redUV + smearOffset, 0.001, 0.999);
-        float2 gUV = clamp(greenUV + smearOffset, 0.001, 0.999);
-        float2 bUV = clamp(blueUV + smearOffset, 0.001, 0.999);
+    smear = smearDir * (2.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.121);
 
-        float r = tex.sample(s, rUV).r;
-        float g = tex.sample(s, gUV).g;
-        float b = tex.sample(s, bUV).b;
+    smear = smearDir * (3.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.066);
 
-        color += float3(r, g, b) * weights[i];
-    }
+    smear = smearDir * (4.0 * smearStep);
+    color += vec3_t(
+        tex.sample(s, clamp(baseUV + chromOffset + smear, float2(0.001), float2(0.999))).r,
+        tex.sample(s, clamp(baseUV + smear, float2(0.001), float2(0.999))).g,
+        tex.sample(s, clamp(baseUV - chromOffset + smear, float2(0.001), float2(0.999))).b
+    ) * scalar_t(0.028);
 
     return color;
 }
 
-float3 calculateSdfSpecular(float2 pixelPos, constant SdfUniforms &sdfShape, thread float &specular) {
-    if (sdfShape.size.y <= 0.0) return float3(0.0);
-
-    float2 pos = pixelPos - sdfShape.position;
-    float cornerRadius = sdfShape.size.y;
-    float sdf = sdRoundedRect(pos, sdfShape.size, cornerRadius);
-    float normalizedDist = sdf / min(sdfShape.size.x, sdfShape.size.y);
-    float glow = saturate(1.0 - normalizedDist - 1.0);
-
-    specular += pow(glow, GlassEffects::specularExp1) * sdfShape.intensity * GlassEffects::specularWeight1;
-    specular += pow(glow, GlassEffects::specularExp2) * sdfShape.intensity * GlassEffects::specularWeight2;
-
-    float3 color = float3(1.0) * pow(glow, GlassEffects::baseGlowExp) * GlassEffects::baseGlowIntensity;
-
-    float rim = smoothstep(0.6, 0.9, glow) * smoothstep(1.0, 0.8, glow);
-    color += float3(1.0) * rim * GlassEffects::rimIntensity;
-
-    return color;
+vec3_t calculateSdfSpecular(float sdf, float minSize, scalar_t intensity, thread scalar_t &specular) {
+    scalar_t normalizedDist = scalar_t(sdf / minSize);
+    scalar_t glow = saturate(scalar_t(1.0) - normalizedDist - scalar_t(1.0));
+    scalar_t glowPow = glow * glow;
+    specular = fma(glowPow, intensity * Glass::specularWeight, specular);
+    return vec3_t(glowPow * Glass::baseGlowIntensity);
 }
 
-float3 applySdfFill(float3 color, float sdfDist) {
-    float fill = smoothstep(GlassEffects::fillTransitionOuter, GlassEffects::fillTransitionInner, sdfDist);
-    return mix(color, color + GlassEffects::fillTint, fill * GlassEffects::fillOpacity);
+vec3_t applySdfFill(vec3_t color, scalar_t sdfDist) {
+    scalar_t fill = smoothstep(Glass::fillTransitionOuter, Glass::fillTransitionInner, sdfDist);
+    return fma(vec3_t(0.3, 0.3, 0.4), vec3_t(fill * Glass::fillOpacity), color);
 }
 
-float3 applyUnselectedFills(float3 color, float2 pixelPos, constant TabUniforms &tabs) {
+vec3_t applyUnselectedFills(vec3_t color, float2 pixelPos, constant TabUniforms &tabs) {
     for (int i = 0; i < tabs.count && i < 8; i++) {
         float alpha = tabs.fillAlpha[i];
-
         if (alpha <= 0.0) continue;
 
         float2 pos = pixelPos - tabs.positions[i];
         float2 halfSize = tabs.sizes[i];
-
-        if (halfSize.y <= 0.0) {
-            halfSize = float2(tabs.fillRadius, tabs.fillRadius * 0.7);
-        }
+        if (halfSize.y <= 0.0) halfSize = float2(tabs.fillRadius, tabs.fillRadius * 0.7);
 
         float deform = tabs.deformX[i];
-        float widthMult = 1.0 + deform * 0.35;
-        float heightMult = 1.0 - deform * 0.35 * 0.75;
-        halfSize.x *= widthMult;
-        halfSize.y *= heightMult;
+        halfSize *= float2(fma(deform, 0.35, 1.0), fma(deform, -0.2625, 1.0));
 
-        float cornerRadius = halfSize.y;
-        float sdf = sdRoundedRect(pos, halfSize, cornerRadius);
-
-        float fill = smoothstep(GlassEffects::unselectedFillOuter, GlassEffects::unselectedFillInner, sdf);
-        color = mix(color, color + GlassEffects::unselectedTint, fill * tabs.fillOpacity * alpha);
+        float sdf = sdRoundedRect(pos, halfSize, halfSize.y);
+        scalar_t fill = smoothstep(Glass::unselectedFillOuter, Glass::unselectedFillInner, scalar_t(sdf));
+        color = fma(vec3_t(0.1), vec3_t(fill * scalar_t(tabs.fillOpacity * alpha)), color);
     }
     return color;
 }
 
-float3 calculateEdgeEffects(float glassSdf, float easedProximity, float intensity, float2 relativePos) {
-    if (intensity <= 0.0) return float3(0.0);
+vec3_t calculateEdgeEffects(scalar_t glassSdf, scalar_t easedProximity, scalar_t intensity, float2 normDir) {
+    if (intensity <= scalar_t(0.0)) return vec3_t(0.0);
 
-    float2 normDir = normalize(relativePos + 0.001);
-    float diagonal = dot(normDir, normalize(float2(1.0, 1.0)));
-    float highlightMask = 0.5 + 0.5 * smoothstep(-0.3, 0.7, diagonal);
-    float shadowMask = smoothstep(0.3, -0.7, diagonal);
+    scalar_t diagonal = scalar_t(dot(normDir, Glass::diagonalDir));
+    scalar_t highlightMask = fma(scalar_t(0.5), smoothstep(scalar_t(-0.3), scalar_t(0.7), diagonal), scalar_t(0.5));
+    scalar_t shadowMask = smoothstep(scalar_t(0.3), scalar_t(-0.7), diagonal);
+    scalar_t absGlassSdf = abs(glassSdf);
 
-    float3 effects = float3(0.0);
+    scalar_t fresnel = pow(easedProximity, Glass::fresnelExponent) * Glass::fresnelIntensity * highlightMask;
+    scalar_t edgeMask = smoothstep(Glass::edgeMaskWidth, scalar_t(0.0), absGlassSdf) * Glass::edgeMaskIntensity * highlightMask;
+    scalar_t border = (smoothstep(Glass::borderOuter, scalar_t(0.0), absGlassSdf) - smoothstep(Glass::borderInner, scalar_t(0.0), absGlassSdf)) * Glass::borderIntensity * highlightMask;
+    scalar_t shadow = smoothstep(Glass::edgeMaskWidth, scalar_t(0.0), absGlassSdf) * scalar_t(0.15) * shadowMask;
 
-    float fresnel = pow(easedProximity, GlassEffects::fresnelExponent) * GlassEffects::fresnelIntensity;
-    effects += float3(1.0) * fresnel * highlightMask;
-
-    float edgeMask = smoothstep(GlassEffects::edgeMaskWidth, 0.0, abs(glassSdf));
-    effects += float3(1.0) * edgeMask * GlassEffects::edgeMaskIntensity * highlightMask;
-
-    float border = smoothstep(GlassEffects::borderOuter, 0.0, abs(glassSdf)) - smoothstep(GlassEffects::borderInner, 0.0, abs(glassSdf));
-    effects += float3(1.0) * border * GlassEffects::borderIntensity * highlightMask;
-
-    float shadowEdge = smoothstep(GlassEffects::edgeMaskWidth, 0.0, abs(glassSdf));
-    effects -= float3(0.15) * shadowEdge * shadowMask;
-
-    return effects * intensity;
+    return vec3_t(fresnel + edgeMask + border - shadow) * intensity;
 }
 
 vertex VertexOut liquidGlassVertex(uint vertexID [[vertex_id]]) {
-    float2 positions[4] = {
-        float2(-1.0, -1.0), float2(1.0, -1.0),
-        float2(-1.0,  1.0), float2(1.0,  1.0)
-    };
-    float2 texCoords[4] = {
-        float2(0.0, 1.0), float2(1.0, 1.0),
-        float2(0.0, 0.0), float2(1.0, 0.0)
-    };
-
+    const float2 positions[4] = { float2(-1.0, -1.0), float2(1.0, -1.0), float2(-1.0, 1.0), float2(1.0, 1.0) };
+    const float2 texCoords[4] = { float2(0.0, 1.0), float2(1.0, 1.0), float2(0.0, 0.0), float2(1.0, 0.0) };
     VertexOut out;
     out.position = float4(positions[vertexID], 0.0, 1.0);
     out.texCoord = texCoords[vertexID];
@@ -279,95 +255,86 @@ fragment float4 liquidGlassTabBarFragment(
     constant SdfUniforms &sdf2 [[buffer(2)]],
     constant TabUniforms &tabs [[buffer(3)]]
 ) {
-    const float kSmearStrength = GlassEffects::smearPercent * glass.glassSize.y;
-    const float kChromaticStrength = GlassEffects::chromaticPercent * glass.glassSize.y;
-    const float kRefractionMultiplier = GlassEffects::refractionMultiplier;
-    const float kPaddingAmount = GlassEffects::paddingPercent;
-
+    float2 invViewSize = 1.0 / glass.viewSize;
     float2 pixelPos = in.texCoord * glass.viewSize;
-    float2 uv = in.texCoord;
-
-    float2 glassCenter = glass.glassOrigin + glass.glassSize * 0.5;
+    float2 glassCenter = fma(glass.glassSize, float2(0.5), glass.glassOrigin);
     float2 relativePos = pixelPos - glassCenter;
     float2 halfSize = glass.glassSize * 0.5;
-    float glassSdf = sdSquashStretch(relativePos, halfSize, glass.cornerRadius, glass.scrollVelocity.x, 0.45);
 
+    float glassSdf = sdSquashStretch(relativePos, halfSize, glass.scrollVelocity.x, 0.45);
+
+    bool insideGlass = glassSdf < 1.0;
+
+    float sdf1Dist = 10000.0;
+    float sdf2Dist = 10000.0;
+    float sdfDist = 10000.0;
     bool sdfEnabled = sdf1.size.y > 0.0 || sdf2.size.y > 0.0;
 
-    float sdfDist = 10000.0;
     if (sdfEnabled) {
-        float sdf1Dist = calculateSdf(pixelPos, sdf1);
-        float sdf2Dist = calculateSdf(pixelPos, sdf2);
-        float blendK = max(min(sdf1.size.y, sdf2.size.y) * GlassEffects::sdfBlendFactor, GlassEffects::sdfBlendMinK);
+        if (sdf1.size.y > 0.0) sdf1Dist = sdRoundedRect(pixelPos - sdf1.position, sdf1.size, sdf1.size.y);
+        if (sdf2.size.y > 0.0) sdf2Dist = sdRoundedRect(pixelPos - sdf2.position, sdf2.size, sdf2.size.y);
+        float blendK = max(min(sdf1.size.y, sdf2.size.y) * Glass::sdfBlendFactor, Glass::sdfBlendMinK);
         sdfDist = smin(sdf1Dist, sdf2Dist, blendK);
     }
 
-    bool insideGlass = glassSdf < 1.0;
     bool insideSdf = sdfEnabled && sdfDist < 0.0;
+    if (!insideGlass && !insideSdf) discard_fragment();
 
-    if (!insideGlass && !insideSdf) {
-        discard_fragment();
-    }
+    float2 uv = in.texCoord;
 
     if (!insideGlass && insideSdf) {
-        float3 color = backdropTexture.sample(linearSampler, uv).rgb;
-        color = applySdfFill(color, sdfDist);
-        float specular = 0.0;
-        color += calculateSdfSpecular(pixelPos, sdf1, specular);
-        color += calculateSdfSpecular(pixelPos, sdf2, specular);
-        color += specular * glass.specularIntensity * GlassEffects::specularMultiplier;
-        float sdfAlpha = saturate(-sdfDist * GlassEffects::sdfAlphaSharpness);
-        return float4(color * sdfAlpha, sdfAlpha);
+        vec3_t color = vec3_t(backdropTexture.sample(linearSampler, uv).rgb);
+        color = applySdfFill(color, scalar_t(sdfDist));
+
+        scalar_t specular = 0.0;
+        if (sdf1.size.y > 0.0) color += calculateSdfSpecular(sdf1Dist, min(sdf1.size.x, sdf1.size.y), scalar_t(sdf1.intensity), specular);
+        if (sdf2.size.y > 0.0) color += calculateSdfSpecular(sdf2Dist, min(sdf2.size.x, sdf2.size.y), scalar_t(sdf2.intensity), specular);
+        color += specular * scalar_t(glass.specularIntensity * 0.8);
+
+        scalar_t sdfAlpha = saturate(scalar_t(-sdfDist) * Glass::sdfAlphaSharpness);
+        return float4(float3(color * sdfAlpha), float(sdfAlpha));
     }
 
-    float alpha = saturate(-glassSdf * GlassEffects::glassAlphaSharpness);
-    if (alpha <= 0.0) discard_fragment();
+    scalar_t alpha = saturate(scalar_t(-glassSdf) * Glass::glassAlphaSharpness);
+    if (alpha <= scalar_t(0.0)) discard_fragment();
 
-    float distFromEdge = -glassSdf;
     float maxDist = min(halfSize.x, halfSize.y);
-    float refractionZoneWidth = maxDist * glass.refractionZonePercent;
-    float proximity = 1.0 - saturate(distFromEdge / refractionZoneWidth);
-    float easedProximity = pow(proximity, GlassEffects::proximityEasing);
+    scalar_t proximity = scalar_t(1.0) - saturate(scalar_t(-glassSdf / (maxDist * glass.refractionZonePercent)));
+    scalar_t easedProximity = pow(proximity, Glass::proximityEasing);
 
     float2 towardEdgeDir = normalize(relativePos + 0.001);
     float2 tangentDir = float2(-towardEdgeDir.y, towardEdgeDir.x);
 
     float xEdgeFactor = abs(towardEdgeDir.x);
     float yEdgeFactor = abs(towardEdgeDir.y);
-    float xScale = mix(1.0, glass.refractionScaleX, xEdgeFactor);
-    float yScale = mix(1.0, glass.refractionScaleY, yEdgeFactor);
-    float adjustedProximity = proximity * xScale * yScale;
+    scalar_t scaleFactorX = scalar_t(mix(1.0, glass.refractionScaleX, xEdgeFactor));
+    scalar_t scaleFactorY = scalar_t(mix(1.0, glass.refractionScaleY, yEdgeFactor));
+    scalar_t adjustedProximity = proximity * scaleFactorX * scaleFactorY;
 
-    float2 refractedUV = calculateRefractedUV(
-        uv, towardEdgeDir, glass.viewSize,
-        adjustedProximity, glass.refractionStrength,
-        kRefractionMultiplier, kPaddingAmount
-    );
+    float2 refractedUV = calculateRefractedUV(uv, towardEdgeDir, invViewSize, adjustedProximity, scalar_t(glass.refractionStrength));
 
-    float chromaticProximity = smoothstep(0.5, 1.0, proximity);
-    float chromaticXScale = mix(1.0, glass.chromaticScaleX, xEdgeFactor);
-    float chromaticYScale = mix(1.0, glass.chromaticScaleY, yEdgeFactor);
-    float chromatic = chromaticProximity * kChromaticStrength * chromaticXScale * chromaticYScale;
+    scalar_t chromaticProximity = smoothstep(scalar_t(0.5), scalar_t(1.0), proximity);
+    float chromatic = float(chromaticProximity) * Glass::chromaticPercent * glass.glassSize.y
+                    * mix(1.0, glass.chromaticScaleX, xEdgeFactor) * mix(1.0, glass.chromaticScaleY, yEdgeFactor);
+    float smear = float(easedProximity) * Glass::smearPercent * glass.glassSize.y;
 
-    float smear = easedProximity * kSmearStrength;
-    float3 color = sampleWithChromaticAberration(
-        backdropTexture, linearSampler,
-        refractedUV, towardEdgeDir, tangentDir,
-        glass.viewSize, chromatic, smear
-    );
+    float2 chromaticDir = towardEdgeDir * invViewSize;
+    float2 smearDir = tangentDir * invViewSize;
 
-    color += calculateEdgeEffects(glassSdf, easedProximity, glass.edgeIntensity, relativePos);
+    vec3_t color = sampleWithChromaticAberration(backdropTexture, linearSampler, refractedUV, chromaticDir, smearDir, chromatic, smear);
+    color += calculateEdgeEffects(scalar_t(glassSdf), easedProximity, scalar_t(glass.edgeIntensity), towardEdgeDir);
 
     if (sdfEnabled) {
         color = applyUnselectedFills(color, pixelPos, tabs);
-        color = applySdfFill(color, sdfDist);
-        float specular = 0.0;
-        color += calculateSdfSpecular(pixelPos, sdf1, specular);
-        color += calculateSdfSpecular(pixelPos, sdf2, specular);
-        color += specular * glass.specularIntensity * GlassEffects::specularMultiplier;
+        color = applySdfFill(color, scalar_t(sdfDist));
+
+        scalar_t specular = 0.0;
+        if (sdf1.size.y > 0.0) color += calculateSdfSpecular(sdf1Dist, min(sdf1.size.x, sdf1.size.y), scalar_t(sdf1.intensity), specular);
+        if (sdf2.size.y > 0.0) color += calculateSdfSpecular(sdf2Dist, min(sdf2.size.x, sdf2.size.y), scalar_t(sdf2.intensity), specular);
+        color += specular * scalar_t(glass.specularIntensity * 0.8);
     }
 
-    return float4(color * alpha, alpha);
+    return float4(float3(color * alpha), float(alpha));
 }
 
 fragment float4 liquidGlassSdfFragment(
@@ -379,25 +346,22 @@ fragment float4 liquidGlassSdfFragment(
     constant SdfUniforms &sdf2 [[buffer(2)]]
 ) {
     float2 pixelPos = in.texCoord * glass.viewSize;
-    float2 uv = in.texCoord;
 
-    float sdf1Dist = calculateSdf(pixelPos, sdf1);
-    float sdf2Dist = calculateSdf(pixelPos, sdf2);
-    float blendK = max(min(sdf1.size.y, sdf2.size.y) * GlassEffects::sdfBlendFactor, GlassEffects::sdfBlendMinK);
+    float sdf1Dist = sdf1.size.y > 0.0 ? sdRoundedRect(pixelPos - sdf1.position, sdf1.size, sdf1.size.y) : 10000.0;
+    float sdf2Dist = sdf2.size.y > 0.0 ? sdRoundedRect(pixelPos - sdf2.position, sdf2.size, sdf2.size.y) : 10000.0;
+    float blendK = max(min(sdf1.size.y, sdf2.size.y) * Glass::sdfBlendFactor, Glass::sdfBlendMinK);
     float sdfDist = smin(sdf1Dist, sdf2Dist, blendK);
 
-    if (sdfDist >= 0.0) {
-        discard_fragment();
-    }
+    if (sdfDist >= 0.0) discard_fragment();
 
-    float3 color = backdropTexture.sample(linearSampler, uv).rgb;
+    vec3_t color = vec3_t(backdropTexture.sample(linearSampler, in.texCoord).rgb);
+    color = applySdfFill(color, scalar_t(sdfDist));
 
-    color = applySdfFill(color, sdfDist);
-    float specular = 0.0;
-    color += calculateSdfSpecular(pixelPos, sdf1, specular);
-    color += calculateSdfSpecular(pixelPos, sdf2, specular);
-    color += specular * glass.specularIntensity * GlassEffects::specularMultiplier;
+    scalar_t specular = 0.0;
+    if (sdf1.size.y > 0.0) color += calculateSdfSpecular(sdf1Dist, min(sdf1.size.x, sdf1.size.y), scalar_t(sdf1.intensity), specular);
+    if (sdf2.size.y > 0.0) color += calculateSdfSpecular(sdf2Dist, min(sdf2.size.x, sdf2.size.y), scalar_t(sdf2.intensity), specular);
+    color += specular * scalar_t(glass.specularIntensity * 0.8);
 
-    float sdfAlpha = saturate(-sdfDist * GlassEffects::sdfAlphaSharpness);
-    return float4(color * sdfAlpha, sdfAlpha);
+    scalar_t sdfAlpha = saturate(scalar_t(-sdfDist) * Glass::sdfAlphaSharpness);
+    return float4(float3(color * sdfAlpha), float(sdfAlpha));
 }
