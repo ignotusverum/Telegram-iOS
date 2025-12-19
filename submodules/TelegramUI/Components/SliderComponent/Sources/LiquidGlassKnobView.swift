@@ -69,7 +69,6 @@ final class LiquidGlassKnobView: UIView {
     private var metalView: MTKView?
     private var renderer: SliderGlassRenderer?
     private var hasValidBackdrop: Bool = false
-    private var lastCapturedKnobX: CGFloat = -1000  // Track position for capture optimization
 
     // MARK: - BackdropClient Support
 
@@ -283,16 +282,7 @@ final class LiquidGlassKnobView: UIView {
         let scaleSettled = scaleAnimator.isSettled
         let wobbleSettled = wobbleAnimator.isSettled
 
-        // Capture backdrop while expanded, but only when knob moves significantly
-        let willBeExpanded = currentScale > Constants.expandedThreshold
-        if willBeExpanded && isExpanded {
-            let moveThreshold: CGFloat = 2.0  // Only recapture if moved more than 2pt
-            if abs(knobCenterX - lastCapturedKnobX) > moveThreshold || !hasValidBackdrop {
-                BackdropCoordinator.shared.setNeedsCapture()
-                lastCapturedKnobX = knobCenterX
-            }
-        }
-
+        // Capture is triggered in expand(), coordinator handles it
         BackdropCoordinator.shared.captureIfNeeded()
 
         if !scaleSettled || !wobbleSettled || isExpanded {
@@ -307,7 +297,6 @@ final class LiquidGlassKnobView: UIView {
         guard !isExpanded else { return }
         isExpanded = true
 
-        lastCapturedKnobX = knobCenterX
         BackdropCoordinator.shared.setNeedsCapture()
         scaleAnimator.target = Constants.expandedScale
         wobbleAnimator.triggerLift()
@@ -316,6 +305,7 @@ final class LiquidGlassKnobView: UIView {
     func collapse() {
         guard isExpanded else { return }
         isExpanded = false
+        hasValidBackdrop = false  // Reset so next expand will re-capture
 
         scaleAnimator.target = Constants.collapsedScale
         wobbleAnimator.triggerDrop()

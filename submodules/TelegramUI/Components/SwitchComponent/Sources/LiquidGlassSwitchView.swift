@@ -58,6 +58,10 @@ public final class LiquidGlassSwitchView: UIControl {
         didSet { updateTrackColor() }
     }
 
+    public override var isEnabled: Bool {
+        didSet { updateEnabledState() }
+    }
+
     // MARK: - Views
 
     private var trackContainer: UIView!
@@ -176,7 +180,7 @@ public final class LiquidGlassSwitchView: UIControl {
         metalContainerView.isUserInteractionEnabled = false
         metalContainerView.isHidden = true
         metalContainerView.frame = .zero  // Will be set in updateThumbFrame when needed
-        insertSubview(metalContainerView, at: 0)  // Behind other views
+        addSubview(metalContainerView)  // On top of other views when expanded
 
         let mtkView = MTKView(frame: .zero, device: device)
         mtkView.isOpaque = false
@@ -332,6 +336,14 @@ public final class LiquidGlassSwitchView: UIControl {
             alpha: offA + (onA - offA) * colorProgress
         )
         trackTintLayer.backgroundColor = blendedColor.cgColor
+    }
+
+    private func updateEnabledState() {
+        let alpha: CGFloat = isEnabled ? 1.0 : 0.5
+        trackContainer.alpha = alpha
+        thumbBackground.alpha = alpha
+        metalContainerView.alpha = alpha
+        isUserInteractionEnabled = isEnabled
     }
 
     // MARK: - Display Link
