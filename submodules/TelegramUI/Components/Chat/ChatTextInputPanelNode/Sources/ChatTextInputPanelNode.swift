@@ -281,7 +281,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         weak var view: UIView?
 
         init() {
-            // More bouncy spring - lower damping for oscillation
             scaleAnimator.stiffness = 400
             scaleAnimator.damping = 12
             scaleAnimator.setValue(1.0, animated: false)
@@ -5215,7 +5214,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.inputMorph.view = self.textInputContainerBackgroundView
         self.micMorph.view = self.mediaActionButtons.micButtonBackgroundView
 
-        // Ensure anchor points are centered for proper scaling (preserve visual position)
         func setAnchorPointPreservingPosition(_ view: UIView, anchorPoint: CGPoint) {
             let oldAnchor = view.layer.anchorPoint
             let oldPosition = view.layer.position
@@ -5240,8 +5238,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.view.addSubview(overlay)
         self.tripleMorphOverlay = overlay
 
-        // Use pan gesture for iOS 26 style immediate drag-to-morph
-        // No delay - dragging starts morph immediately, tap still triggers action
         let attachPan = UIPanGestureRecognizer(target: self, action: #selector(self.handleMorphPan(_:)))
         attachPan.cancelsTouchesInView = false
         attachPan.delaysTouchesBegan = false
@@ -5287,21 +5283,17 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             morph.lastLocation = location
             morph.lastLocationTime = CACurrentMediaTime()
             morph.wobbleAnimator.triggerLift()
-            // Subtle initial lift
             morph.scaleAnimator.setValue(1.05, animated: true)
             self.hapticFeedback.impact(.light)
             self.activateMorphOverlay()
             self.startMorphDisplayLink()
 
         case .changed:
-            // Scale based on drag distance (subtle, max 1.15)
             let translation = gesture.translation(in: self.view)
             let dragDistance = hypot(translation.x, translation.y)
             let targetScale = min(1.05 + dragDistance / 300.0, 1.15)
             morph.scaleAnimator.setValue(targetScale, animated: false)
 
-            // Track velocity for stretchy deformation - use gesture velocity directly
-            // Scale down for the wobble animator (expects smaller values)
             let scaledVelocity = CGPoint(x: velocity.x * 0.001, y: velocity.y * 0.001)
             morph.wobbleAnimator.trackVelocity(scaledVelocity)
 
@@ -5321,12 +5313,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         guard !self.isMorphActive else { return }
         self.isMorphActive = true
 
-        // Show Metal overlay on top (original views stay visible underneath)
         self.tripleMorphOverlay?.isHidden = false
         self.tripleMorphOverlay?.frame = self.view.bounds
         self.view.bringSubviewToFront(self.tripleMorphOverlay!)
 
-        // Set initial shapes based on component positions
         self.updateMorphShapes()
         print("[Morph] Activated with Metal overlay")
     }
@@ -5335,7 +5325,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         guard self.isMorphActive else { return }
         self.isMorphActive = false
 
-        // Hide Metal overlay, reset transforms on original views
         self.tripleMorphOverlay?.isHidden = true
         self.attachmentButtonBackground.layer.transform = CATransform3DIdentity
         self.textInputContainerBackgroundView.layer.transform = CATransform3DIdentity
@@ -5346,23 +5335,18 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     private func updateMorphShapes() {
         guard let overlay = self.tripleMorphOverlay else { return }
 
-        // Use layer position (center) and bounds (unaffected by transform) to get accurate positions
         let attachLayer = self.attachmentButtonBackground.layer
         let inputLayer = self.textInputContainerBackgroundView.layer
         let micLayer = self.mediaActionButtons.micButtonBackgroundView.layer
 
-        // Convert center positions to overlay coordinates
         let attachCenter = self.attachmentButtonBackground.superview?.convert(attachLayer.position, to: overlay) ?? .zero
         let inputCenter = self.textInputContainerBackgroundView.superview?.convert(inputLayer.position, to: overlay) ?? .zero
         let micCenter = self.mediaActionButtons.micButtonBackgroundView.superview?.convert(micLayer.position, to: overlay) ?? .zero
 
-        // Get base sizes from bounds (unaffected by transform)
-        // Don't apply scale here - Metal shader will apply scale via uniforms
         let attachSize = attachLayer.bounds.size
         let inputSize = inputLayer.bounds.size
         let micSize = micLayer.bounds.size
 
-        // Create shapes with BASE sizes - Metal shader applies scaling via uniforms
         let shape1 = MorphShape.circle(
             center: attachCenter,
             radius: min(attachSize.width, attachSize.height) / 2
@@ -5388,12 +5372,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         let velocity2 = self.inputMorph.wobbleAnimator.normalizedVelocity
         let velocity3 = self.micMorph.wobbleAnimator.normalizedVelocity
 
-        // Stretchy deformation based on velocity (more pronounced)
         let deform1 = CGFloat(velocity1.x) * 0.25
         let deform2 = CGFloat(velocity2.x) * 0.12
         let deform3 = CGFloat(velocity3.x) * 0.25
 
-        // Apply CALayer transforms to original views (scale + stretch deform)
         self.attachmentButtonBackground.layer.transform = CATransform3DMakeScale(
             scale1 * (1.0 + deform1),
             scale1 * (1.0 - deform1 * 0.5),
@@ -5410,7 +5392,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             1.0
         )
 
-        // Update Metal overlay for merge regions
         if let overlay = self.tripleMorphOverlay {
             overlay.scale1 = scale1
             overlay.scale2 = scale2
@@ -5420,7 +5401,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             overlay.velocity3 = CGPoint(x: CGFloat(velocity3.x), y: CGFloat(velocity3.y))
         }
 
-        // Update shape positions/sizes for SDF blending
         self.updateMorphShapes()
     }
 
@@ -5444,7 +5424,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                 anyLifted = true
             }
 
-            // Check if animations are settled
             if !morph.scaleAnimator.isSettled || !morph.wobbleAnimator.isSettled {
                 anyAnimating = true
             }
@@ -5452,7 +5431,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
 
         self.updateMorphTransforms()
 
-        // Deactivate when not lifted and animations are settled
         if !anyLifted && !anyAnimating {
             print("[Morph] All settled, deactivating")
             self.morphDisplayLink?.invalidate()

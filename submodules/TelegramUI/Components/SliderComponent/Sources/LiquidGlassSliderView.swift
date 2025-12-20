@@ -183,12 +183,10 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     }
 
     private func prepareTrackForCapture() {
-        // Hide track - Metal captures only background
         trackContainer.isHidden = true
     }
 
     private func restoreTrackAfterCapture() {
-        // Show track
         trackContainer.isHidden = false
     }
 

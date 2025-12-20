@@ -194,7 +194,6 @@ public final class SliderComponent: Component {
                 
                 transition.setFrame(view: sliderView, frame: CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: availableSize.width, height: 44.0)))
             } else if CustomLiquidGlassCapability.isSupported {
-                // Use LiquidGlassSliderView for custom liquid glass effect
                 self.sliderView?.removeFromSuperview()
                 self.sliderView = nil
 
@@ -220,19 +219,16 @@ public final class SliderComponent: Component {
                         self?.component?.isTrackingUpdated?(isTracking)
                     }
 
-                    // Use addTarget for value changes (don't use onValueChanged to avoid duplicate calls)
                     liquidSlider.addTarget(self, action: #selector(self.sliderValueChanged), for: .valueChanged)
                     self.addSubview(liquidSlider)
                     self.liquidGlassSliderView = liquidSlider
                 }
 
-                // Configure colors
                 liquidSlider.configureColors(
                     trackBackground: component.trackBackgroundColor,
                     trackForeground: component.trackForegroundColor
                 )
 
-                // Update value
                 switch component.content {
                 case let .discrete(discrete):
                     liquidSlider.value = CGFloat(discrete.value)
@@ -242,7 +238,6 @@ public final class SliderComponent: Component {
 
                 transition.setFrame(view: liquidSlider, frame: CGRect(origin: .zero, size: size))
             } else {
-                // Use regular TGPhotoEditorSliderView
                 self.liquidGlassSliderView?.removeFromSuperview()
                 self.liquidGlassSliderView = nil
 

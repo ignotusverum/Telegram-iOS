@@ -52,7 +52,6 @@ public final class TripleMorphRenderer: NSObject, MTKViewDelegate {
             return
         }
 
-        // Use the no-backdrop version of the shader
         guard let vertex = library.makeFunction(name: "liquidGlassVertex"),
               let fragment = library.makeFunction(name: "liquidGlassTripleMorphNoBackdropFragment") else {
             print("[TripleMorphRenderer] Failed to create shader functions")

@@ -4,11 +4,10 @@ import Display
 import AsyncDisplayKit
 import ComponentFlow
 import TelegramPresentationData
+import CustomLiquidGlass
 
 public final class SwitchComponent: Component {
     public typealias EnvironmentType = Empty
-
-    public static var enableCustomLiquidGlass: Bool = SwitchComponent.enableCustomLiquidGlass
 
     public let tintColor: UIColor?
     public let offTintColor: UIColor?
@@ -35,9 +34,6 @@ public final class SwitchComponent: Component {
             return false
         }
         if lhs.value != rhs.value {
-            return false
-        }
-        if lhs.enableLiquidGlass != rhs.enableLiquidGlass {
             return false
         }
         return true
@@ -68,7 +64,7 @@ public final class SwitchComponent: Component {
         func update(component: SwitchComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
             self.component = component
 
-            if component.enableLiquidGlass {
+            if CustomLiquidGlassCapability.isSupported {
                 self.switchView?.removeFromSuperview()
                 self.switchView = nil
 

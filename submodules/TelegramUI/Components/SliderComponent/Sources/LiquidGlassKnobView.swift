@@ -52,7 +52,6 @@ final class LiquidGlassKnobView: UIView {
     var onPrepareForCapture: (() -> Void)?
     var onRestoreAfterCapture: (() -> Void)?
 
-    // Track info for lifted fill
     var trackFillColor: CGColor? {
         didSet { liftedFillLayer?.backgroundColor = trackFillColor }
     }
@@ -274,7 +273,6 @@ final class LiquidGlassKnobView: UIView {
         let width = currentKnobWidth
         let height = currentKnobHeight
 
-        // Position container at knob frame (pill shape mask)
         let containerFrame = CGRect(
             x: knobCenterX - width / 2,
             y: (bounds.height - height) / 2,
@@ -284,8 +282,6 @@ final class LiquidGlassKnobView: UIView {
         liftedFillContainer.frame = containerFrame
         liftedFillContainer.layer.cornerRadius = min(width, height) / 2
 
-        // Position fill layer to align with track
-        // Fill extends from track start to knob center
         let trackY = (height - trackHeight) / 2
         let fillStartX = trackFrame.minX - containerFrame.minX
         let fillWidth = knobCenterX - trackFrame.minX
