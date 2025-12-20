@@ -88,7 +88,7 @@ public struct ExperimentalUISettings: Codable, Equatable {
             experimentalCompatibility: false,
             enableDebugDataDisplay: false,
             fakeGlass: false,
-            customLiquidGlass: false,
+            customLiquidGlass: true,
             compressedEmojiCache: false,
             localTranscription: false,
             enableReactionOverrides: false,

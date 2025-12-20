@@ -37,6 +37,7 @@ swift_library(
     	"//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Markdown:Markdown",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
+        "//submodules/CustomLiquidGlass",
         ":DisplayObjC",
     ],
     visibility = [

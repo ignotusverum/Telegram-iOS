@@ -390,6 +390,30 @@ public enum DeviceModel: CaseIterable, Equatable {
     public var isIpad: Bool {
         return self.modelId.first?.hasPrefix("iPad") ?? false
     }
+
+    public var hasA14OrNewerChip: Bool {
+        switch self {
+        case .iPhone12, .iPhone12Mini, .iPhone12Pro, .iPhone12ProMax,
+             .iPhone13, .iPhone13Mini, .iPhone13Pro, .iPhone13ProMax,
+             .iPhoneSE3rdGen,
+             .iPhone14, .iPhone14Plus, .iPhone14Pro, .iPhone14ProMax,
+             .iPhone15, .iPhone15Plus, .iPhone15Pro, .iPhone15ProMax,
+             .iPhone16, .iPhone16Plus, .iPhone16Pro, .iPhone16ProMax, .iPhone16e,
+             .iPhone17, .iPhone17Pro, .iPhone17ProMax, .iPhoneAir:
+            return true
+        case .unknown(let modelId):
+            if modelId.hasPrefix("iPhone") {
+                let numberPart = modelId.dropFirst(6)
+                if let commaIndex = numberPart.firstIndex(of: ","),
+                   let majorVersion = Int(numberPart[..<commaIndex]) {
+                    return majorVersion >= 13
+                }
+            }
+            return false
+        default:
+            return false
+        }
+    }
     
     public static let current = DeviceModel()
     

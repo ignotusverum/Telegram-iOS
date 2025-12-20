@@ -8,25 +8,22 @@ import TelegramPresentationData
 public final class SwitchComponent: Component {
     public typealias EnvironmentType = Empty
 
-    public static var enableCustomLiquidGlass: Bool = true
+    public static var enableCustomLiquidGlass: Bool = SwitchComponent.enableCustomLiquidGlass
 
     public let tintColor: UIColor?
     public let offTintColor: UIColor?
     public let value: Bool
-    public let enableLiquidGlass: Bool
     public let valueUpdated: (Bool) -> Void
 
     public init(
         tintColor: UIColor? = nil,
         offTintColor: UIColor? = nil,
         value: Bool,
-        enableLiquidGlass: Bool? = nil,
         valueUpdated: @escaping (Bool) -> Void
     ) {
         self.tintColor = tintColor
         self.offTintColor = offTintColor
         self.value = value
-        self.enableLiquidGlass = enableLiquidGlass ?? SwitchComponent.enableCustomLiquidGlass
         self.valueUpdated = valueUpdated
     }
 

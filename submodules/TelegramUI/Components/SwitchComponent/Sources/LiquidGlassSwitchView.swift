@@ -154,6 +154,7 @@ public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate
     }
 
     private func setupMetalView() {
+        guard CustomLiquidGlassCapability.isSupported else { return }
         guard let device = MTLCreateSystemDefaultDevice() else {
             return
         }

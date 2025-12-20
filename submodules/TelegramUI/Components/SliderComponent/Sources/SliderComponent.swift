@@ -5,6 +5,7 @@ import AsyncDisplayKit
 import TelegramPresentationData
 import LegacyComponents
 import ComponentFlow
+import CustomLiquidGlass
 
 public final class SliderComponent: Component {
     public final class Discrete: Equatable {
@@ -68,7 +69,6 @@ public final class SliderComponent: Component {
     
     public let content: Content
     public let useNative: Bool
-    public let enableCustomLiquidGlass: Bool
     public let trackBackgroundColor: UIColor
     public let trackForegroundColor: UIColor
     public let minTrackForegroundColor: UIColor?
@@ -79,7 +79,6 @@ public final class SliderComponent: Component {
     public init(
         content: Content,
         useNative: Bool = false,
-        enableCustomLiquidGlass: Bool = true,
         trackBackgroundColor: UIColor,
         trackForegroundColor: UIColor,
         minTrackForegroundColor: UIColor? = nil,
@@ -89,7 +88,6 @@ public final class SliderComponent: Component {
     ) {
         self.content = content
         self.useNative = useNative
-        self.enableCustomLiquidGlass = enableCustomLiquidGlass
         self.trackBackgroundColor = trackBackgroundColor
         self.trackForegroundColor = trackForegroundColor
         self.minTrackForegroundColor = minTrackForegroundColor
@@ -100,9 +98,6 @@ public final class SliderComponent: Component {
     
     public static func ==(lhs: SliderComponent, rhs: SliderComponent) -> Bool {
         if lhs.content != rhs.content {
-            return false
-        }
-        if lhs.enableCustomLiquidGlass != rhs.enableCustomLiquidGlass {
             return false
         }
         if lhs.trackBackgroundColor != rhs.trackBackgroundColor {
@@ -198,7 +193,7 @@ public final class SliderComponent: Component {
                 sliderView.maximumTrackTintColor = component.trackBackgroundColor
                 
                 transition.setFrame(view: sliderView, frame: CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: availableSize.width, height: 44.0)))
-            } else if component.enableCustomLiquidGlass {
+            } else if CustomLiquidGlassCapability.isSupported {
                 // Use LiquidGlassSliderView for custom liquid glass effect
                 self.sliderView?.removeFromSuperview()
                 self.sliderView = nil

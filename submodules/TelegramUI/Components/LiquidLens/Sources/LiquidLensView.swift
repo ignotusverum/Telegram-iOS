@@ -3,8 +3,7 @@ import UIKit
 import Display
 import ComponentFlow
 import GlassBackgroundComponent
-
-private let enableCustomLiquidGlass: Bool = true
+import CustomLiquidGlass
 
 private final class RestingBackgroundView: UIVisualEffectView {
     var isDark: Bool?
@@ -164,7 +163,7 @@ public final class LiquidLensView: UIView {
                 let instance = objcAlloc.perform(initSelector, with: UIView()).takeUnretainedValue()
                 self.lensView = instance as? UIView
             }
-        } else if enableCustomLiquidGlass {
+        } else if CustomLiquidGlassCapability.isSupported {
             let customLens = LegacyLiquidLensView(frame: .zero, restingBackgroundView: restingBackgroundView)
             self.lensView = customLens
         }

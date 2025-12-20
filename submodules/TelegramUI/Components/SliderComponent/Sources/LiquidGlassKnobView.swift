@@ -172,6 +172,7 @@ final class LiquidGlassKnobView: UIView {
     }
 
     private func setupMetal() {
+        guard CustomLiquidGlassCapability.isSupported else { return }
         guard let device = MTLCreateSystemDefaultDevice() else {
             print("[LiquidGlassKnobView] Metal not available")
             return

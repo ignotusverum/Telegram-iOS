@@ -52,6 +52,7 @@ swift_library(
         ":CustomLiquidGlassBundle",
     ],
     deps = [
+        "//submodules/Utils/DeviceModel",
     ],
     visibility = [
         "//visibility:public",
