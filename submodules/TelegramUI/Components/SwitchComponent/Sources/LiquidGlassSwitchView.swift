@@ -7,7 +7,7 @@ private final class LiquidGlassSwitchViewLayer: CALayer {
     }
 }
 
-public final class LiquidGlassSwitchView: UIControl {
+public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate {
 
     public override class var layerClass: AnyClass {
         if #available(iOS 26.0, *) {
@@ -191,19 +191,25 @@ public final class LiquidGlassSwitchView: UIControl {
 
     private func setupGestures() {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        pan.delegate = self
         addGestureRecognizer(pan)
 
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
         longPress.minimumPressDuration = 0
+        longPress.delegate = self
         addGestureRecognizer(longPress)
     }
 
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+
     private func setupAnimators() {
-        positionAnimator.stiffness = 400
+        positionAnimator.stiffness = 200
         positionAnimator.damping = 18
         positionAnimator.setValue(thumbMinX, animated: false)
 
-        thumbScaleAnimator.stiffness = 400
+        thumbScaleAnimator.stiffness = 200
         thumbScaleAnimator.damping = 18
         thumbScaleAnimator.setValue(1.0, animated: false)
 
@@ -355,6 +361,7 @@ public final class LiquidGlassSwitchView: UIControl {
     @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
         switch gesture.state {
         case .began:
+            panDidStart = false
             pendingCollapseWork?.cancel()
             thumbScaleAnimator.target = Constants.expandedScaleX
         case .ended, .cancelled:
@@ -393,7 +400,6 @@ public final class LiquidGlassSwitchView: UIControl {
             let targetX = thumbMinX + progress * (thumbMaxX - thumbMinX)
             positionAnimator.target = targetX
         case .ended, .cancelled:
-            panDidStart = false
             let shouldBeOn = progress > 0.5
             isOn = shouldBeOn
             let targetX = shouldBeOn ? thumbMaxX : thumbMinX
