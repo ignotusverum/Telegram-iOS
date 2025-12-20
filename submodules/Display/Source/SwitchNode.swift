@@ -1,7 +1,6 @@
 import Foundation
 import UIKit
 import AsyncDisplayKit
-import CustomLiquidGlass
 
 private final class SwitchNodeViewLayer: CALayer {
     override func setNeedsDisplay() {
@@ -19,6 +18,7 @@ private final class SwitchNodeView: UISwitch {
 }
 
 open class SwitchNode: ASDisplayNode {
+    public static var enableCustomLiquidGlass: Bool = false
     public static var glassViewFactory: (() -> UIView)?
     public static var glassViewConfigurer: ((UIView, Bool, UIColor, UIColor) -> Void)?
     public static var glassViewValueGetter: ((UIView) -> Bool)?
@@ -83,7 +83,7 @@ open class SwitchNode: ASDisplayNode {
         super.init()
 
         self.setViewBlock({ [weak self] in
-            if CustomLiquidGlassCapability.isSupported,
+            if SwitchNode.enableCustomLiquidGlass,
                let factory = SwitchNode.glassViewFactory {
                 self?.isUsingGlassSwitch = true
                 return factory()

@@ -487,6 +487,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         
         GlassBackgroundView.useCustomGlassImpl = immediateExperimentalUISettingsValue.with({ $0.fakeGlass })
         CustomLiquidGlassCapability.isEnabledBySettings = immediateExperimentalUISettingsValue.with({ $0.customLiquidGlass })
+        SwitchNode.enableCustomLiquidGlass = CustomLiquidGlassCapability.isSupported
 
         self.experimentalUISettingsDisposable = (self.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.experimentalUISettings])
         |> deliverOnMainQueue).start(next: { sharedData in
@@ -496,6 +497,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 flatBuffers_checkedGet = settings.checkSerializedData
                 GlassBackgroundView.useCustomGlassImpl = settings.fakeGlass
                 CustomLiquidGlassCapability.isEnabledBySettings = settings.customLiquidGlass
+                SwitchNode.enableCustomLiquidGlass = CustomLiquidGlassCapability.isSupported
             }
         })
         
