@@ -49,8 +49,21 @@ final class LiquidGlassKnobView: UIView {
     private(set) var isExpanded: Bool = false
 
     var onTick: (() -> Void)?
+    var onPrepareForCapture: (() -> Void)?
+    var onRestoreAfterCapture: (() -> Void)?
+
+    // Track info for lifted fill
+    var trackFillColor: CGColor? {
+        didSet { liftedFillLayer?.backgroundColor = trackFillColor }
+    }
+    var trackFrame: CGRect = .zero {
+        didSet { updateLiftedFill() }
+    }
+    var trackHeight: CGFloat = 8
 
     private var collapsedKnobView: UIView!
+    private var liftedFillContainer: UIView!
+    private var liftedFillLayer: CALayer!
 
     private var metalView: MTKView?
     private var renderer: LegacyLensRenderer?
@@ -128,7 +141,20 @@ final class LiquidGlassKnobView: UIView {
 
         setupCollapsedKnob()
         setupMetal()
+        setupLiftedFill()
         setupAnimators()
+    }
+
+    private func setupLiftedFill() {
+        liftedFillContainer = UIView()
+        liftedFillContainer.clipsToBounds = true
+        liftedFillContainer.isUserInteractionEnabled = false
+        liftedFillContainer.layer.cornerCurve = .continuous
+        addSubview(liftedFillContainer)
+
+        liftedFillLayer = CALayer()
+        liftedFillLayer.cornerRadius = trackHeight / 2
+        liftedFillContainer.layer.addSublayer(liftedFillLayer)
     }
 
     private func setupCollapsedKnob() {
@@ -236,6 +262,44 @@ final class LiquidGlassKnobView: UIView {
             metalView?.isPaused = true
         }
         metalView?.isHidden = !showMetal
+
+        updateLiftedFill()
+        liftedFillContainer.isHidden = !showMetal
+    }
+
+    private func updateLiftedFill() {
+        guard trackFrame.width > 0 else { return }
+
+        let width = currentKnobWidth
+        let height = currentKnobHeight
+
+        // Position container at knob frame (pill shape mask)
+        let containerFrame = CGRect(
+            x: knobCenterX - width / 2,
+            y: (bounds.height - height) / 2,
+            width: width,
+            height: height
+        )
+        liftedFillContainer.frame = containerFrame
+        liftedFillContainer.layer.cornerRadius = min(width, height) / 2
+
+        // Position fill layer to align with track
+        // Fill extends from track start to knob center
+        let trackY = (height - trackHeight) / 2
+        let fillStartX = trackFrame.minX - containerFrame.minX
+        let fillWidth = knobCenterX - trackFrame.minX
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        liftedFillLayer.frame = CGRect(
+            x: fillStartX,
+            y: trackY,
+            width: max(0, fillWidth),
+            height: trackHeight
+        )
+        liftedFillLayer.cornerRadius = trackHeight / 2
+        liftedFillLayer.backgroundColor = trackFillColor
+        CATransaction.commit()
     }
 
     @objc private func displayLinkFired() {
@@ -246,9 +310,6 @@ final class LiquidGlassKnobView: UIView {
         let wobbleSettled = wobbleAnimator.isSettled
         let settled = scaleSettled && wobbleSettled
 
-        if isExpanded {
-            BackdropCoordinator.shared.setNeedsCapture()
-        }
         BackdropCoordinator.shared.captureIfNeeded()
 
         updateLayout()
@@ -395,6 +456,7 @@ extension LiquidGlassKnobView: BackdropClient {
         )
         metalView?.isHidden = true
         collapsedKnobView.isHidden = true
+        onPrepareForCapture?()
     }
 
     public func restoreAfterCapture() {
@@ -403,6 +465,7 @@ extension LiquidGlassKnobView: BackdropClient {
         metalView?.isHidden = !showMetal
         let showGray = thumbScale < Constants.grayThreshold
         collapsedKnobView.isHidden = !showGray
+        onRestoreAfterCapture?()
     }
 
     public func didReceiveBackdrop(_ texture: MTLTexture, unionRect: CGRect, screenScale: CGFloat) {

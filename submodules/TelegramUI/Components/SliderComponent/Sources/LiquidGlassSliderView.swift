@@ -11,6 +11,7 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
 
     private var trackContainer: UIView!
     private var trackTintLayer: CALayer!
+    private var trackFillMaskLayer: CALayer!
     private var glassKnobView: LiquidGlassKnobView!
 
     var onTrackingChanged: ((Bool) -> Void)?
@@ -46,6 +47,10 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         trackTintLayer.masksToBounds = true
         trackContainer.layer.addSublayer(trackTintLayer)
 
+        trackFillMaskLayer = CALayer()
+        trackFillMaskLayer.backgroundColor = UIColor.white.cgColor
+        trackTintLayer.mask = trackFillMaskLayer
+
         glassKnobView = LiquidGlassKnobView()
         glassKnobView.knobWidth = Constants.thumbWidth
         glassKnobView.knobHeight = Constants.thumbHeight
@@ -53,6 +58,12 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
             guard let self else { return }
             self.updateTrackFill()
             self.trackVelocityIfNeeded()
+        }
+        glassKnobView.onPrepareForCapture = { [weak self] in
+            self?.prepareTrackForCapture()
+        }
+        glassKnobView.onRestoreAfterCapture = { [weak self] in
+            self?.restoreTrackAfterCapture()
         }
         addSubview(glassKnobView)
 
@@ -125,8 +136,11 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
 
         trackTintLayer.frame = trackContainer.bounds
         trackTintLayer.cornerRadius = Constants.trackHeight / 2
+        trackFillMaskLayer.frame = trackContainer.bounds
 
         glassKnobView.frame = bounds
+        glassKnobView.trackFrame = trackContainer.frame
+        glassKnobView.trackHeight = Constants.trackHeight
 
         updateKnobPosition()
         updateTrackFill()
@@ -155,17 +169,27 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
         let padding = Constants.thumbWidth / 2
         let fillWidth = knobCenterX - padding
 
-        trackTintLayer.removeAllAnimations()
+        trackFillMaskLayer.removeAllAnimations()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         CATransaction.setAnimationDuration(0)
-        trackTintLayer.frame = CGRect(
+        trackFillMaskLayer.frame = CGRect(
             x: 0,
             y: 0,
             width: max(0, fillWidth),
             height: Constants.trackHeight
         )
         CATransaction.commit()
+    }
+
+    private func prepareTrackForCapture() {
+        // Hide track - Metal captures only background
+        trackContainer.isHidden = true
+    }
+
+    private func restoreTrackAfterCapture() {
+        // Show track
+        trackContainer.isHidden = false
     }
 
     private func updateKnobPosition() {
@@ -182,6 +206,7 @@ final class LiquidGlassSliderView: TGPhotoEditorSliderView {
     func configureColors(trackBackground: UIColor, trackForeground: UIColor) {
         trackContainer.backgroundColor = trackBackground
         trackTintLayer.backgroundColor = trackForeground.cgColor
+        glassKnobView.trackFillColor = trackForeground.cgColor
     }
 }
 
