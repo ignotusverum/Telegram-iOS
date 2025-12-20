@@ -50,6 +50,37 @@ struct TabUniforms {
     float  fillOpacity;
 };
 
+struct MorphUniforms {
+    float2 viewSize;
+    float  morphProgress;
+    float  blendSoftness;
+    float2 velocity;
+    float2 uvOffset;
+    float2 uvScale;
+};
+
+struct MorphShapeDescriptor {
+    float2 center;
+    float2 size;
+    float  cornerRadius;
+    float  _padding;
+};
+
+struct TripleMorphUniforms {
+    float2 viewSize;
+    float  blendSoftness;
+    float  _pad1;
+    float2 velocity1;
+    float2 velocity2;
+    float2 velocity3;
+    float  scale1;
+    float  scale2;
+    float  scale3;
+    float  _pad2;
+    float2 uvOffset;
+    float2 uvScale;
+};
+
 namespace Glass {
     constant scalar_t refractiveRatio = scalar_t(1.0 / 1.5);
     constant scalar_t proximityEasing = scalar_t(0.6);
@@ -101,6 +132,60 @@ inline float sdSquashStretch(float2 pos, float2 halfSize, float velocityX, float
 inline float smin(float a, float b, float k) {
     float h = saturate(fma(0.5, (b - a) / k, 0.5));
     return fma(-k * h, 1.0 - h, mix(b, a, h));
+}
+
+inline float sdSquashStretchRadius(float2 pos, float2 halfSize, float radius, float velocityX, float deformAmount) {
+    float deform = clamp(velocityX, -1.0, 1.0) * deformAmount;
+    float widthMult = clamp(1.0 + deform, 0.7, 1.3);
+    float heightMult = clamp(1.0 - deform * 0.45, 0.7, 1.3);
+    float2 deformedHalfSize = halfSize * float2(widthMult, heightMult);
+    float2 adjustedPos = pos - float2(halfSize.x * (widthMult - 1.0) * 0.15, 0.0);
+    float deformedRadius = min(radius * min(widthMult, heightMult), min(deformedHalfSize.x, deformedHalfSize.y));
+    float2 q = abs(adjustedPos) - deformedHalfSize + deformedRadius;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - deformedRadius;
+}
+
+inline float morphShapes(float sdf1, float sdf2, float progress, float softness) {
+    float blendedSdf = smin(sdf1, sdf2, softness);
+    float linearBlend = mix(sdf1, sdf2, progress);
+    float morphFactor = 4.0 * progress * (1.0 - progress);
+    return mix(linearBlend, blendedSdf, morphFactor);
+}
+
+inline float2 morphGradient(float2 pos,
+                            float2 center1, float2 halfSize1, float radius1,
+                            float2 center2, float2 halfSize2, float radius2,
+                            float progress, float softness, float velocityX, float deformAmount) {
+    float eps = 0.5;
+    float2 dx = float2(eps, 0.0);
+    float2 dy = float2(0.0, eps);
+
+    float sdf1_c = sdSquashStretchRadius(pos - center1, halfSize1, radius1, velocityX, deformAmount);
+    float sdf2_c = sdSquashStretchRadius(pos - center2, halfSize2, radius2, velocityX, deformAmount);
+    float c = morphShapes(sdf1_c, sdf2_c, progress, softness);
+
+    float sdf1_px = sdSquashStretchRadius(pos + dx - center1, halfSize1, radius1, velocityX, deformAmount);
+    float sdf2_px = sdSquashStretchRadius(pos + dx - center2, halfSize2, radius2, velocityX, deformAmount);
+    float px = morphShapes(sdf1_px, sdf2_px, progress, softness);
+
+    float sdf1_py = sdSquashStretchRadius(pos + dy - center1, halfSize1, radius1, velocityX, deformAmount);
+    float sdf2_py = sdSquashStretchRadius(pos + dy - center2, halfSize2, radius2, velocityX, deformAmount);
+    float py = morphShapes(sdf1_py, sdf2_py, progress, softness);
+
+    return normalize(float2(px - c, py - c) + 0.0001);
+}
+
+vec3_t applyMorphBorder(vec3_t color, float sdfDist, float2 gradient) {
+    scalar_t borderMask = smoothstep(Glass::borderOuter, scalar_t(0.0), scalar_t(abs(sdfDist)));
+    scalar_t diagonal = scalar_t(dot(gradient, Glass::diagonalDir));
+    scalar_t highlight = fma(scalar_t(0.5), smoothstep(scalar_t(-0.3), scalar_t(0.7), diagonal), scalar_t(0.5));
+    return color + vec3_t(borderMask * Glass::borderIntensity * highlight);
+}
+
+vec3_t applyMorphSpecular(vec3_t color, float sdfDist, float minSize) {
+    scalar_t normalizedDist = scalar_t(sdfDist / minSize);
+    scalar_t glow = saturate(scalar_t(1.0) - normalizedDist - scalar_t(1.0));
+    return color + vec3_t(glow * glow * scalar_t(0.3));
 }
 
 inline float2 calculateRefractedUV(float2 uv, float2 towardEdgeDir, float2 invViewSize, scalar_t proximity, scalar_t refractionStrength) {
@@ -368,4 +453,206 @@ fragment float4 liquidGlassSdfFragment(
 
     scalar_t sdfAlpha = saturate(scalar_t(-sdfDist) * Glass::sdfAlphaSharpness);
     return float4(float3(color * sdfAlpha), float(sdfAlpha));
+}
+
+fragment float4 liquidGlassMorphFragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> backdropTexture [[texture(0)]],
+    sampler linearSampler [[sampler(0)]],
+    constant MorphUniforms &uniforms [[buffer(0)]],
+    constant MorphShapeDescriptor &shape1 [[buffer(1)]],
+    constant MorphShapeDescriptor &shape2 [[buffer(2)]]
+) {
+    float2 pixelPos = in.texCoord * uniforms.viewSize;
+    float2 halfSize1 = shape1.size * 0.5;
+    float2 halfSize2 = shape2.size * 0.5;
+    float deformAmount = 0.35;
+
+    float sdf1 = sdSquashStretchRadius(pixelPos - shape1.center, halfSize1, shape1.cornerRadius, uniforms.velocity.x, deformAmount);
+    float sdf2 = sdSquashStretchRadius(pixelPos - shape2.center, halfSize2, shape2.cornerRadius, uniforms.velocity.x, deformAmount);
+
+    float morphedSdf = morphShapes(sdf1, sdf2, uniforms.morphProgress, uniforms.blendSoftness);
+
+    if (morphedSdf >= 1.0) discard_fragment();
+
+    float2 uv = uniforms.uvOffset + in.texCoord * uniforms.uvScale;
+    vec3_t color = vec3_t(backdropTexture.sample(linearSampler, uv).rgb);
+
+    float2 gradient = morphGradient(pixelPos,
+                                     shape1.center, halfSize1, shape1.cornerRadius,
+                                     shape2.center, halfSize2, shape2.cornerRadius,
+                                     uniforms.morphProgress, uniforms.blendSoftness,
+                                     uniforms.velocity.x, deformAmount);
+
+    color = applySdfFill(color, scalar_t(morphedSdf));
+    color = applyMorphBorder(color, morphedSdf, gradient);
+
+    float minSize = min(
+        mix(min(shape1.size.x, shape1.size.y), min(shape2.size.x, shape2.size.y), uniforms.morphProgress),
+        uniforms.blendSoftness
+    );
+    color = applyMorphSpecular(color, morphedSdf, minSize);
+
+    scalar_t alpha = saturate(scalar_t(-morphedSdf) * Glass::sdfAlphaSharpness);
+    return float4(float3(color * alpha), float(alpha));
+}
+
+fragment float4 liquidGlassMorphSingleFragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> backdropTexture [[texture(0)]],
+    sampler linearSampler [[sampler(0)]],
+    constant MorphUniforms &uniforms [[buffer(0)]],
+    constant MorphShapeDescriptor &shape [[buffer(1)]]
+) {
+    float2 pixelPos = in.texCoord * uniforms.viewSize;
+    float2 halfSize = shape.size * 0.5;
+    float deformAmount = 0.35;
+
+    float sdf = sdSquashStretchRadius(pixelPos - shape.center, halfSize, shape.cornerRadius, uniforms.velocity.x, deformAmount);
+
+    if (sdf >= 1.0) discard_fragment();
+
+    float2 uv = uniforms.uvOffset + in.texCoord * uniforms.uvScale;
+    vec3_t color = vec3_t(backdropTexture.sample(linearSampler, uv).rgb);
+
+    float eps = 0.5;
+    float sdf_px = sdSquashStretchRadius(pixelPos + float2(eps, 0) - shape.center, halfSize, shape.cornerRadius, uniforms.velocity.x, deformAmount);
+    float sdf_py = sdSquashStretchRadius(pixelPos + float2(0, eps) - shape.center, halfSize, shape.cornerRadius, uniforms.velocity.x, deformAmount);
+    float2 gradient = normalize(float2(sdf_px - sdf, sdf_py - sdf) + 0.0001);
+
+    color = applySdfFill(color, scalar_t(sdf));
+    color = applyMorphBorder(color, sdf, gradient);
+
+    float minSize = min(shape.size.x, shape.size.y);
+    color = applyMorphSpecular(color, sdf, minSize);
+
+    scalar_t alpha = saturate(scalar_t(-sdf) * Glass::sdfAlphaSharpness);
+    return float4(float3(color * alpha), float(alpha));
+}
+
+fragment float4 liquidGlassTripleMorphFragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> backdropTexture [[texture(0)]],
+    sampler linearSampler [[sampler(0)]],
+    constant TripleMorphUniforms &uniforms [[buffer(0)]],
+    constant MorphShapeDescriptor &shape1 [[buffer(1)]],
+    constant MorphShapeDescriptor &shape2 [[buffer(2)]],
+    constant MorphShapeDescriptor &shape3 [[buffer(3)]]
+) {
+    float2 pixelPos = in.texCoord * uniforms.viewSize;
+    float deformAmount = 0.25;
+
+    float2 scaledSize1 = shape1.size * uniforms.scale1;
+    float2 scaledSize2 = shape2.size * uniforms.scale2;
+    float2 scaledSize3 = shape3.size * uniforms.scale3;
+
+    float2 halfSize1 = scaledSize1 * 0.5;
+    float2 halfSize2 = scaledSize2 * 0.5;
+    float2 halfSize3 = scaledSize3 * 0.5;
+
+    float radius1 = shape1.cornerRadius * uniforms.scale1;
+    float radius2 = shape2.cornerRadius * uniforms.scale2;
+    float radius3 = shape3.cornerRadius * uniforms.scale3;
+
+    float sdf1 = sdSquashStretchRadius(pixelPos - shape1.center, halfSize1, radius1, uniforms.velocity1.x, deformAmount);
+    float sdf2 = sdSquashStretchRadius(pixelPos - shape2.center, halfSize2, radius2, uniforms.velocity2.x, deformAmount);
+    float sdf3 = sdSquashStretchRadius(pixelPos - shape3.center, halfSize3, radius3, uniforms.velocity3.x, deformAmount);
+
+    float blended12 = smin(sdf1, sdf2, uniforms.blendSoftness);
+    float blendedAll = smin(blended12, sdf3, uniforms.blendSoftness);
+
+    if (blendedAll >= 1.0) discard_fragment();
+
+    float2 uv = uniforms.uvOffset + in.texCoord * uniforms.uvScale;
+    vec3_t color = vec3_t(backdropTexture.sample(linearSampler, uv).rgb);
+
+    float eps = 0.5;
+    float sdf1_px = sdSquashStretchRadius(pixelPos + float2(eps, 0) - shape1.center, halfSize1, radius1, uniforms.velocity1.x, deformAmount);
+    float sdf2_px = sdSquashStretchRadius(pixelPos + float2(eps, 0) - shape2.center, halfSize2, radius2, uniforms.velocity2.x, deformAmount);
+    float sdf3_px = sdSquashStretchRadius(pixelPos + float2(eps, 0) - shape3.center, halfSize3, radius3, uniforms.velocity3.x, deformAmount);
+    float blended_px = smin(smin(sdf1_px, sdf2_px, uniforms.blendSoftness), sdf3_px, uniforms.blendSoftness);
+
+    float sdf1_py = sdSquashStretchRadius(pixelPos + float2(0, eps) - shape1.center, halfSize1, radius1, uniforms.velocity1.x, deformAmount);
+    float sdf2_py = sdSquashStretchRadius(pixelPos + float2(0, eps) - shape2.center, halfSize2, radius2, uniforms.velocity2.x, deformAmount);
+    float sdf3_py = sdSquashStretchRadius(pixelPos + float2(0, eps) - shape3.center, halfSize3, radius3, uniforms.velocity3.x, deformAmount);
+    float blended_py = smin(smin(sdf1_py, sdf2_py, uniforms.blendSoftness), sdf3_py, uniforms.blendSoftness);
+
+    float2 gradient = normalize(float2(blended_px - blendedAll, blended_py - blendedAll) + 0.0001);
+
+    color = applySdfFill(color, scalar_t(blendedAll));
+    color = applyMorphBorder(color, blendedAll, gradient);
+
+    float minSize = min(min(scaledSize1.x, scaledSize1.y), min(min(scaledSize2.x, scaledSize2.y), min(scaledSize3.x, scaledSize3.y)));
+    color = applyMorphSpecular(color, blendedAll, minSize);
+
+    scalar_t alpha = saturate(scalar_t(-blendedAll) * Glass::sdfAlphaSharpness);
+    return float4(float3(color * alpha), float(alpha));
+}
+
+// Triple morph fragment shader - transparent, only draws merge regions between shapes
+fragment float4 liquidGlassTripleMorphNoBackdropFragment(
+    VertexOut in [[stage_in]],
+    constant TripleMorphUniforms &uniforms [[buffer(0)]],
+    constant MorphShapeDescriptor &shape1 [[buffer(1)]],
+    constant MorphShapeDescriptor &shape2 [[buffer(2)]],
+    constant MorphShapeDescriptor &shape3 [[buffer(3)]]
+) {
+    float2 pixelPos = in.texCoord * uniforms.viewSize;
+    float deformAmount = 0.25;
+
+    float2 scaledSize1 = shape1.size * uniforms.scale1;
+    float2 scaledSize2 = shape2.size * uniforms.scale2;
+    float2 scaledSize3 = shape3.size * uniforms.scale3;
+
+    float2 halfSize1 = scaledSize1 * 0.5;
+    float2 halfSize2 = scaledSize2 * 0.5;
+    float2 halfSize3 = scaledSize3 * 0.5;
+
+    float radius1 = shape1.cornerRadius * uniforms.scale1;
+    float radius2 = shape2.cornerRadius * uniforms.scale2;
+    float radius3 = shape3.cornerRadius * uniforms.scale3;
+
+    float sdf1 = sdSquashStretchRadius(pixelPos - shape1.center, halfSize1, radius1, uniforms.velocity1.x, deformAmount);
+    float sdf2 = sdSquashStretchRadius(pixelPos - shape2.center, halfSize2, radius2, uniforms.velocity2.x, deformAmount);
+    float sdf3 = sdSquashStretchRadius(pixelPos - shape3.center, halfSize3, radius3, uniforms.velocity3.x, deformAmount);
+
+    // Blended SDF (metaball effect)
+    float blended12 = smin(sdf1, sdf2, uniforms.blendSoftness);
+    float blendedAll = smin(blended12, sdf3, uniforms.blendSoftness);
+
+    // Individual shapes minimum (no blending)
+    float minIndividual = min(min(sdf1, sdf2), sdf3);
+
+    // Only draw in the "merge region" - where blended is inside but individuals are outside
+    // This is the "neck" connecting two close shapes
+    float mergeRegion = minIndividual - blendedAll;
+
+    // Skip if not in merge region or outside blended shape
+    if (blendedAll >= 0.0 || mergeRegion < 1.0) discard_fragment();
+
+    // Calculate gradient for border highlight
+    float eps = 0.5;
+    float sdf1_px = sdSquashStretchRadius(pixelPos + float2(eps, 0) - shape1.center, halfSize1, radius1, uniforms.velocity1.x, deformAmount);
+    float sdf2_px = sdSquashStretchRadius(pixelPos + float2(eps, 0) - shape2.center, halfSize2, radius2, uniforms.velocity2.x, deformAmount);
+    float sdf3_px = sdSquashStretchRadius(pixelPos + float2(eps, 0) - shape3.center, halfSize3, radius3, uniforms.velocity3.x, deformAmount);
+    float blended_px = smin(smin(sdf1_px, sdf2_px, uniforms.blendSoftness), sdf3_px, uniforms.blendSoftness);
+
+    float sdf1_py = sdSquashStretchRadius(pixelPos + float2(0, eps) - shape1.center, halfSize1, radius1, uniforms.velocity1.x, deformAmount);
+    float sdf2_py = sdSquashStretchRadius(pixelPos + float2(0, eps) - shape2.center, halfSize2, radius2, uniforms.velocity2.x, deformAmount);
+    float sdf3_py = sdSquashStretchRadius(pixelPos + float2(0, eps) - shape3.center, halfSize3, radius3, uniforms.velocity3.x, deformAmount);
+    float blended_py = smin(smin(sdf1_py, sdf2_py, uniforms.blendSoftness), sdf3_py, uniforms.blendSoftness);
+
+    float2 gradient = normalize(float2(blended_px - blendedAll, blended_py - blendedAll) + 0.0001);
+
+    // Transparent fill that bleeds from the edges - no solid color
+    vec3_t color = vec3_t(1.0, 1.0, 1.0); // White tint for subtle highlight
+
+    // Soft edge blend - fades from edges
+    scalar_t edgeFade = smoothstep(scalar_t(0.0), scalar_t(-8.0), scalar_t(blendedAll));
+
+    // Very subtle alpha - just enough to see the connection
+    scalar_t alpha = edgeFade * saturate(scalar_t(mergeRegion) * scalar_t(0.08));
+    alpha *= scalar_t(0.3); // Keep it very subtle
+
+    return float4(float3(color * alpha), float(alpha));
 }
