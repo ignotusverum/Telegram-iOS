@@ -47,7 +47,6 @@ import TextNodeWithEntities
 import DeviceModel
 import PhotoResources
 import GlassBackgroundComponent
-import CustomLiquidGlass
 import ComponentDisplayAdapters
 import ChatInputAccessoryPanel
 import ChatInputAutocompletePanel
@@ -270,44 +269,6 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     private var commentsButtonDotLayer: RasterizedCompositionImageLayer?
     private var attachmentButtonUnseenIcon: UIImageView?
     public let attachmentButtonDisabledNode: HighlightableButtonNode
-
-    private final class MorphableComponent {
-        let scaleAnimator = LegacyScaleAnimator()
-        let wobbleAnimator = SpringWobbleAnimator()
-        var isLifted: Bool = false
-        var dragStartLocation: CGPoint = .zero
-        var lastLocation: CGPoint = .zero
-        var lastLocationTime: CFTimeInterval = 0
-        weak var view: UIView?
-
-        init() {
-            scaleAnimator.stiffness = 400
-            scaleAnimator.damping = 12
-            scaleAnimator.setValue(1.0, animated: false)
-            wobbleAnimator.limits = .subtle
-        }
-
-        func computeVelocity(currentLocation: CGPoint) -> CGPoint {
-            let now = CACurrentMediaTime()
-            let dt = now - lastLocationTime
-            guard dt > 0.001 else { return .zero }
-
-            let vx = (currentLocation.x - lastLocation.x) / dt
-            let vy = (currentLocation.y - lastLocation.y) / dt
-
-            lastLocation = currentLocation
-            lastLocationTime = now
-
-            return CGPoint(x: vx, y: vy)
-        }
-    }
-
-    private let attachmentMorph = MorphableComponent()
-    private let inputMorph = MorphableComponent()
-    private let micMorph = MorphableComponent()
-    private var morphDisplayLink: CADisplayLink?
-    private var tripleMorphOverlay: TripleMorphOverlayView?
-    private var isMorphActive: Bool = false
     
     public var attachmentImageNode: TransformImageNode?
     
@@ -669,7 +630,9 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.glassBackgroundContainer = GlassBackgroundContainerView()
         
         self.textInputContainerBackgroundView = GlassBackgroundView(frame: CGRect())
-        
+        let textInputInteraction = LiquidGlassInteraction(configuration: .subtle)
+        self.textInputContainerBackgroundView.addInteraction(textInputInteraction)
+
         self.accessoryPanelContainer = UIView()
         self.accessoryPanelContainer.clipsToBounds = true
         
@@ -729,6 +692,9 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         
         self.attachmentButtonBackground = GlassBackgroundView(frame: CGRect())
         self.attachmentButtonBackground.contentView.addSubview(self.attachmentButton)
+        let attachmentInteraction = LiquidGlassInteraction()
+        attachmentInteraction.targetView = self.attachmentButtonBackground
+        self.attachmentButton.addInteraction(attachmentInteraction)
         
         self.attachmentButtonIcon = GlassBackgroundView.ContentImageView()
         self.attachmentButtonIcon.isUserInteractionEnabled = false
@@ -752,7 +718,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         
         self.slowModeButton = BoostSlowModeButton()
         self.slowModeButton.alpha = 0.0
-        
+
         self.viewOnceButton = ChatRecordingViewOnceButtonNode(icon: .viewOnce)
         self.recordMoreButton = ChatRecordingViewOnceButtonNode(icon: .recordMore)
         
@@ -764,7 +730,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             self?.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
         }
         self.slowModeButton.addTarget(self, action: #selector(self.slowModeButtonPressed), forControlEvents: .touchUpInside)
-        
+
         self.viewForOverlayContent = ChatTextViewForOverlayContent(
             ignoreHit: { [weak self] view, point in
                 guard let strongSelf = self else {
@@ -859,9 +825,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             }
         }
         self.attachmentButtonDisabledNode.addTarget(self, action: #selector(self.attachmentButtonPressed), forControlEvents: .touchUpInside)
-
-        self.setupAttachmentMorphGestures()
-
+  
         self.sendActionButtons.sendButtonLongPressed = { [weak self] node, gesture in
             self?.interfaceInteraction?.displaySendMessageOptions(node, gesture)
         }
@@ -5208,237 +5172,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             self.displayAttachmentMenu()
         }
     }
-
-    private func setupAttachmentMorphGestures() {
-        self.attachmentMorph.view = self.attachmentButtonBackground
-        self.inputMorph.view = self.textInputContainerBackgroundView
-        self.micMorph.view = self.mediaActionButtons.micButtonBackgroundView
-
-        func setAnchorPointPreservingPosition(_ view: UIView, anchorPoint: CGPoint) {
-            let oldAnchor = view.layer.anchorPoint
-            let oldPosition = view.layer.position
-            let size = view.layer.bounds.size
-            let newPosition = CGPoint(
-                x: oldPosition.x + (anchorPoint.x - oldAnchor.x) * size.width,
-                y: oldPosition.y + (anchorPoint.y - oldAnchor.y) * size.height
-            )
-            view.layer.anchorPoint = anchorPoint
-            view.layer.position = newPosition
-        }
-        setAnchorPointPreservingPosition(self.attachmentButtonBackground, anchorPoint: CGPoint(x: 0.5, y: 0.5))
-        setAnchorPointPreservingPosition(self.textInputContainerBackgroundView, anchorPoint: CGPoint(x: 0.5, y: 0.5))
-        setAnchorPointPreservingPosition(self.mediaActionButtons.micButtonBackgroundView, anchorPoint: CGPoint(x: 0.5, y: 0.5))
-
-        self.textInputContainerBackgroundView.isUserInteractionEnabled = true
-        self.mediaActionButtons.micButtonBackgroundView.isUserInteractionEnabled = true
-
-        let overlay = TripleMorphOverlayView(frame: .zero)
-        overlay.isHidden = true
-        overlay.blendSoftness = 30
-        self.view.addSubview(overlay)
-        self.tripleMorphOverlay = overlay
-
-        let attachPan = UIPanGestureRecognizer(target: self, action: #selector(self.handleMorphPan(_:)))
-        attachPan.cancelsTouchesInView = false
-        attachPan.delaysTouchesBegan = false
-        attachPan.delegate = self
-        self.attachmentButton.addGestureRecognizer(attachPan)
-
-        let inputPan = UIPanGestureRecognizer(target: self, action: #selector(self.handleMorphPan(_:)))
-        inputPan.cancelsTouchesInView = false
-        inputPan.delaysTouchesBegan = false
-        inputPan.delegate = self
-        self.textInputContainerBackgroundView.addGestureRecognizer(inputPan)
-
-        let micPan = UIPanGestureRecognizer(target: self, action: #selector(self.handleMorphPan(_:)))
-        micPan.cancelsTouchesInView = false
-        micPan.delaysTouchesBegan = false
-        micPan.delegate = self
-        self.mediaActionButtons.micButton.addGestureRecognizer(micPan)
-
-        print("[Morph] Setup complete with pan gestures and SDF overlay")
-    }
-
-    private func morphComponent(for gesture: UIGestureRecognizer) -> MorphableComponent? {
-        if gesture.view === self.attachmentButton {
-            return self.attachmentMorph
-        } else if gesture.view === self.textInputContainerBackgroundView {
-            return self.inputMorph
-        } else if gesture.view === self.mediaActionButtons.micButton {
-            return self.micMorph
-        }
-        return nil
-    }
-
-    @objc private func handleMorphPan(_ gesture: UIPanGestureRecognizer) {
-        guard let morph = morphComponent(for: gesture) else { return }
-        let location = gesture.location(in: self.view)
-        let velocity = gesture.velocity(in: self.view)
-
-        switch gesture.state {
-        case .began:
-            print("[Morph] PAN BEGAN on \(String(describing: gesture.view))")
-            morph.isLifted = true
-            morph.dragStartLocation = location
-            morph.lastLocation = location
-            morph.lastLocationTime = CACurrentMediaTime()
-            morph.wobbleAnimator.triggerLift()
-            morph.scaleAnimator.setValue(1.05, animated: true)
-            self.hapticFeedback.impact(.light)
-            self.activateMorphOverlay()
-            self.startMorphDisplayLink()
-
-        case .changed:
-            let translation = gesture.translation(in: self.view)
-            let dragDistance = hypot(translation.x, translation.y)
-            let targetScale = min(1.05 + dragDistance / 300.0, 1.15)
-            morph.scaleAnimator.setValue(targetScale, animated: false)
-
-            let scaledVelocity = CGPoint(x: velocity.x * 0.001, y: velocity.y * 0.001)
-            morph.wobbleAnimator.trackVelocity(scaledVelocity)
-
-        case .ended, .cancelled:
-            print("[Morph] PAN ENDED")
-            morph.isLifted = false
-            morph.scaleAnimator.resetTiming()
-            morph.scaleAnimator.setValue(1.0, animated: true)
-            morph.wobbleAnimator.triggerDrop()
-
-        default:
-            break
-        }
-    }
-
-    private func activateMorphOverlay() {
-        guard !self.isMorphActive else { return }
-        self.isMorphActive = true
-
-        self.tripleMorphOverlay?.isHidden = false
-        self.tripleMorphOverlay?.frame = self.view.bounds
-        self.view.bringSubviewToFront(self.tripleMorphOverlay!)
-
-        self.updateMorphShapes()
-        print("[Morph] Activated with Metal overlay")
-    }
-
-    private func deactivateMorphOverlay() {
-        guard self.isMorphActive else { return }
-        self.isMorphActive = false
-
-        self.tripleMorphOverlay?.isHidden = true
-        self.attachmentButtonBackground.layer.transform = CATransform3DIdentity
-        self.textInputContainerBackgroundView.layer.transform = CATransform3DIdentity
-        self.mediaActionButtons.micButtonBackgroundView.layer.transform = CATransform3DIdentity
-        print("[Morph] Deactivated")
-    }
-
-    private func updateMorphShapes() {
-        guard let overlay = self.tripleMorphOverlay else { return }
-
-        let attachLayer = self.attachmentButtonBackground.layer
-        let inputLayer = self.textInputContainerBackgroundView.layer
-        let micLayer = self.mediaActionButtons.micButtonBackgroundView.layer
-
-        let attachCenter = self.attachmentButtonBackground.superview?.convert(attachLayer.position, to: overlay) ?? .zero
-        let inputCenter = self.textInputContainerBackgroundView.superview?.convert(inputLayer.position, to: overlay) ?? .zero
-        let micCenter = self.mediaActionButtons.micButtonBackgroundView.superview?.convert(micLayer.position, to: overlay) ?? .zero
-
-        let attachSize = attachLayer.bounds.size
-        let inputSize = inputLayer.bounds.size
-        let micSize = micLayer.bounds.size
-
-        let shape1 = MorphShape.circle(
-            center: attachCenter,
-            radius: min(attachSize.width, attachSize.height) / 2
-        )
-        let shape2 = MorphShape.pill(
-            center: inputCenter,
-            size: inputSize
-        )
-        let shape3 = MorphShape.circle(
-            center: micCenter,
-            radius: min(micSize.width, micSize.height) / 2
-        )
-
-        overlay.setShapes(shape1, shape2, shape3)
-    }
-
-    private func updateMorphTransforms() {
-        let scale1 = CGFloat(self.attachmentMorph.scaleAnimator.current)
-        let scale2 = CGFloat(self.inputMorph.scaleAnimator.current)
-        let scale3 = CGFloat(self.micMorph.scaleAnimator.current)
-
-        let velocity1 = self.attachmentMorph.wobbleAnimator.normalizedVelocity
-        let velocity2 = self.inputMorph.wobbleAnimator.normalizedVelocity
-        let velocity3 = self.micMorph.wobbleAnimator.normalizedVelocity
-
-        let deform1 = CGFloat(velocity1.x) * 0.25
-        let deform2 = CGFloat(velocity2.x) * 0.12
-        let deform3 = CGFloat(velocity3.x) * 0.25
-
-        self.attachmentButtonBackground.layer.transform = CATransform3DMakeScale(
-            scale1 * (1.0 + deform1),
-            scale1 * (1.0 - deform1 * 0.5),
-            1.0
-        )
-        self.textInputContainerBackgroundView.layer.transform = CATransform3DMakeScale(
-            scale2 * (1.0 + deform2),
-            scale2 * (1.0 - deform2 * 0.4),
-            1.0
-        )
-        self.mediaActionButtons.micButtonBackgroundView.layer.transform = CATransform3DMakeScale(
-            scale3 * (1.0 + deform3),
-            scale3 * (1.0 - deform3 * 0.5),
-            1.0
-        )
-
-        if let overlay = self.tripleMorphOverlay {
-            overlay.scale1 = scale1
-            overlay.scale2 = scale2
-            overlay.scale3 = scale3
-            overlay.velocity1 = CGPoint(x: CGFloat(velocity1.x), y: CGFloat(velocity1.y))
-            overlay.velocity2 = CGPoint(x: CGFloat(velocity2.x), y: CGFloat(velocity2.y))
-            overlay.velocity3 = CGPoint(x: CGFloat(velocity3.x), y: CGFloat(velocity3.y))
-        }
-
-        self.updateMorphShapes()
-    }
-
-    private func startMorphDisplayLink() {
-        guard self.morphDisplayLink == nil else { return }
-        let displayLink = CADisplayLink(target: self, selector: #selector(self.morphAnimationTick))
-        displayLink.add(to: .main, forMode: .common)
-        self.morphDisplayLink = displayLink
-    }
-
-    @objc private func morphAnimationTick() {
-        let morphs = [self.attachmentMorph, self.inputMorph, self.micMorph]
-        var anyLifted = false
-        var anyAnimating = false
-
-        for morph in morphs {
-            morph.scaleAnimator.step()
-            morph.wobbleAnimator.update(dt: 1.0 / 120.0)
-
-            if morph.isLifted {
-                anyLifted = true
-            }
-
-            if !morph.scaleAnimator.isSettled || !morph.wobbleAnimator.isSettled {
-                anyAnimating = true
-            }
-        }
-
-        self.updateMorphTransforms()
-
-        if !anyLifted && !anyAnimating {
-            print("[Morph] All settled, deactivating")
-            self.morphDisplayLink?.invalidate()
-            self.morphDisplayLink = nil
-            self.deactivateMorphOverlay()
-        }
-    }
-
+    
     @objc func searchLayoutClearButtonPressed() {
         if let interfaceInteraction = self.interfaceInteraction {
             interfaceInteraction.updateTextInputStateAndMode { textInputState, inputMode in
@@ -5745,11 +5479,5 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     
     public func makeAttachmentMenuTransition(accessoryPanelNode: ASDisplayNode?) -> AttachmentInputPanelTransition {
         return AttachmentInputPanelTransition(inputNode: self, accessoryPanelNode: accessoryPanelNode, menuButtonNode: self.menuButton, menuButtonBackgroundView: self.menuButtonBackgroundView, menuIconNode: self.menuButtonIconNode, menuTextNode: self.menuButtonTextNode, prepareForDismiss: { self.menuButtonIconNode.enqueueState(.app, animated: false) })
-    }
-}
-
-extension ChatTextInputPanelNode: UIGestureRecognizerDelegate {
-    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        return true
     }
 }

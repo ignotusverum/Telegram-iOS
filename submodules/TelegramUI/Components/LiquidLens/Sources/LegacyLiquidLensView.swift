@@ -12,7 +12,8 @@ public final class LegacyLiquidLensView: UIView {
         public var fillHideThreshold: CGFloat = 1.06
 
         public var collapsedInset: CGFloat = -4.0
-        public var liftedInset: CGFloat = 8.0
+        public var liftedInsetX: CGFloat = 8.0
+        public var liftedInsetY: CGFloat = 8.0
 
         public var liftStiffness: CGFloat = 250.0
         public var liftDamping: CGFloat = 14.0
@@ -68,6 +69,13 @@ public final class LegacyLiquidLensView: UIView {
                 let velocityX = deltaX / CGFloat(dt)
                 let velocityY = deltaY / CGFloat(dt)
                 wobbleAnimator.trackVelocity(CGPoint(x: velocityX, y: velocityY))
+            }
+
+            let newPosition = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
+            if !isLifted && !isTransitioning {
+                positionAnimator.setPosition(newPosition, animated: false)
+            } else {
+                positionAnimator.target = newPosition
             }
 
             if !isTransitioning {
@@ -148,9 +156,9 @@ public final class LegacyLiquidLensView: UIView {
         applyAnimatorConfig()
         resetAnimatorValues()
 
-        positionAnimator.stiffness = 80.0
-        positionAnimator.damping = 8.0
-        positionAnimator.mass = 0.8
+        positionAnimator.stiffness = 400.0
+        positionAnimator.damping = 25.0
+        positionAnimator.mass = 0.5
 
     }
 
@@ -312,14 +320,11 @@ public final class LegacyLiquidLensView: UIView {
 
     private func collapseAnimation(animated: Bool) {
         wobbleAnimator.release()
-        wobbleAnimator.triggerDrop()
-        let currentHDeform = lastCapturedHDeform
-        liftAnimator.stiffness = 600.0
-        liftAnimator.damping = 22.0
+        liftAnimator.stiffness = config.liftStiffness
+        liftAnimator.damping = config.liftDamping
         liftAnimator.setValue(config.collapsedScale, animated: animated)
         fillScaleAnimator.target = 1.0
         fillAlphaAnimator.target = 1.0
-        fillDeformAnimator.setValue(currentHDeform, animated: false)
         fillDeformAnimator.target = 0
     }
 
@@ -400,22 +405,18 @@ public final class LegacyLiquidLensView: UIView {
     private func updateFrameFromScale() {
         guard baseFrame.width > 0 else { return }
 
-        let inset = config.collapsedInset + (config.liftedInset - config.collapsedInset) * scaleProgress
+        let insetX = config.collapsedInset + (config.liftedInsetX - config.collapsedInset) * scaleProgress
+        let insetY = config.collapsedInset + (config.liftedInsetY - config.collapsedInset) * scaleProgress
 
         let newBounds = CGRect(
             origin: .zero,
             size: CGSize(
-                width: baseFrame.width + inset * 2,
-                height: baseFrame.height + inset * 2
+                width: baseFrame.width + insetX * 2,
+                height: baseFrame.height + insetY * 2
             )
         )
 
-        let newCenter: CGPoint
-        if isTransitioning && !positionAnimator.isSettled {
-            newCenter = positionAnimator.current
-        } else {
-            newCenter = CGPoint(x: baseFrame.midX, y: baseFrame.midY)
-        }
+        let newCenter = positionAnimator.current
 
         if newBounds != cachedBounds {
             cachedBounds = newBounds

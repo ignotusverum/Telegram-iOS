@@ -59,7 +59,7 @@ final class BoostSlowModeButton: HighlightTrackingButtonNode {
         self.containerNode.addSubnode(self.backgroundNode)
         self.containerNode.addSubnode(self.iconNode)
         self.containerNode.addSubnode(self.textNode)
-        
+
         self.highligthedChanged = { [weak self] highlighted in
             if let self {
                 if highlighted {

@@ -59,7 +59,6 @@ swift_library(
         "//submodules/TelegramUI/Components/Chat/ChatTextInputAudioRecordingCancelIndicator",
         "//submodules/TelegramUI/Components/Chat/ChatRecordingViewOnceButtonNode",
         "//submodules/TelegramUI/Components/GlassBackgroundComponent",
-        "//submodules/CustomLiquidGlass",
         "//submodules/TelegramUI/Components/Chat/ChatInputAccessoryPanel",
         "//submodules/TelegramUI/Components/Chat/ChatInputAutocompletePanel",
         "//submodules/TelegramUI/Components/Chat/ChatRecordingPreviewInputPanelNode",

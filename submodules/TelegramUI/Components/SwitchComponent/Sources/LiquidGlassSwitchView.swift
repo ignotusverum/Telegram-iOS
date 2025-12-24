@@ -23,8 +23,8 @@ public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate
         static let thumbWidth: CGFloat = 39
         static let thumbHeight: CGFloat = 24
         static let thumbPadding: CGFloat = 3
-        static let expandedScaleX: CGFloat = 1.6
-        static let expandedScaleY: CGFloat = 1.6
+        static let expandedScaleX: CGFloat = 1.7
+        static let expandedScaleY: CGFloat = 1.7
         static let expandedThreshold: CGFloat = 1.3
         static let metalThreshold: CGFloat = 1.03
         static let grayThreshold: CGFloat = 1.04
@@ -33,13 +33,19 @@ public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate
         static let specularIntensity: Float = 0.2
         static let refractionZonePercent: Float = 0.25
         static let edgeIntensity: Float = 1.0
-        static let deformStrength: CGFloat = 0.35
+        static let deformStrength: CGFloat = 0.6
         static let heightDeformRatio: CGFloat = 0.75
+
+        static let shadowOpacity: Float = 0.25
+        static let shadowRadius: CGFloat = 12
+        static let shadowOffset: CGSize = CGSize(width: 0, height: 4)
     }
 
     public private(set) var isOn: Bool = false {
         didSet {
             if oldValue != isOn {
+                let targetX = isOn ? thumbMaxX : thumbMinX
+                positionAnimator.target = targetX
                 sendActions(for: .valueChanged)
             }
         }
@@ -74,6 +80,7 @@ public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate
     private var displayLink: CADisplayLink?
     private var pendingCollapseWork: DispatchWorkItem?
     private var panDidStart = false
+    private var lastColorIsOn: Bool?
 
     private var thumbMinX: CGFloat {
         Constants.thumbPadding + Constants.thumbWidth / 2
@@ -147,9 +154,7 @@ public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate
         thumbBackground.layer.cornerCurve = .continuous
         thumbBackground.isUserInteractionEnabled = false
         thumbBackground.layer.shadowColor = UIColor.black.cgColor
-        thumbBackground.layer.shadowOffset = CGSize(width: 0, height: 2)
-        thumbBackground.layer.shadowRadius = 4
-        thumbBackground.layer.shadowOpacity = 0.15
+        thumbBackground.layer.shadowOpacity = 0
         addSubview(thumbBackground)
     }
 
@@ -307,24 +312,67 @@ public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate
         }
 
         updateTrackColor()
+        updateShadow()
+    }
+
+    private func updateShadow() {
+        let animatorScale = thumbScaleAnimator.current
+        let progress = max(0, min(1, (animatorScale - 1.0) / (Constants.expandedScaleX - 1.0)))
+
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = Constants.shadowOpacity * Float(progress)
+        layer.shadowRadius = Constants.shadowRadius * progress
+        layer.shadowOffset = CGSize(
+            width: Constants.shadowOffset.width * progress,
+            height: Constants.shadowOffset.height * progress
+        )
+
+        if progress > 0.01 {
+            layer.shadowPath = UIBezierPath(
+                roundedRect: thumbBackground.frame,
+                cornerRadius: thumbBackground.layer.cornerRadius
+            ).cgPath
+        } else {
+            layer.shadowPath = nil
+        }
     }
 
     private func updateTrackColor() {
-        let thumbX = positionAnimator.current
-        let colorProgress = max(0, min(1, (thumbX - thumbMinX) / (thumbMaxX - thumbMinX)))
-
         var offR: CGFloat = 0, offG: CGFloat = 0, offB: CGFloat = 0, offA: CGFloat = 0
         var onR: CGFloat = 0, onG: CGFloat = 0, onB: CGFloat = 0, onA: CGFloat = 0
         offTintColor.getRed(&offR, green: &offG, blue: &offB, alpha: &offA)
         onTintColor.getRed(&onR, green: &onG, blue: &onB, alpha: &onA)
 
-        let blendedColor = UIColor(
-            red: offR + (onR - offR) * colorProgress,
-            green: offG + (onG - offG) * colorProgress,
-            blue: offB + (onB - offB) * colorProgress,
-            alpha: offA + (onA - offA) * colorProgress
-        )
-        trackTintLayer.backgroundColor = blendedColor.cgColor
+        if panDidStart {
+            let thumbX = positionAnimator.current
+            let colorProgress = max(0, min(1, (thumbX - thumbMinX) / (thumbMaxX - thumbMinX)))
+            let blendedColor = UIColor(
+                red: offR + (onR - offR) * colorProgress,
+                green: offG + (onG - offG) * colorProgress,
+                blue: offB + (onB - offB) * colorProgress,
+                alpha: offA + (onA - offA) * colorProgress
+            )
+            trackTintLayer.removeAnimation(forKey: "opacityAnimation")
+            trackTintLayer.opacity = 1.0
+            trackTintLayer.backgroundColor = blendedColor.cgColor
+        } else {
+            let stateChanged = lastColorIsOn != isOn
+            lastColorIsOn = isOn
+
+            let targetColor = isOn ? UIColor(red: onR, green: onG, blue: onB, alpha: 1.0) : UIColor(red: offR, green: offG, blue: offB, alpha: 1.0)
+            trackTintLayer.backgroundColor = targetColor.cgColor
+
+            let targetOpacity = Float(isOn ? onA : offA)
+            if stateChanged {
+                let animation = CABasicAnimation(keyPath: "opacity")
+                animation.fromValue = trackTintLayer.presentation()?.opacity ?? trackTintLayer.opacity
+                animation.toValue = targetOpacity
+                animation.duration = 0.25
+                animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                trackTintLayer.add(animation, forKey: "opacityAnimation")
+            }
+            trackTintLayer.opacity = targetOpacity
+        }
     }
 
     private func updateEnabledState() {
@@ -412,23 +460,17 @@ public final class LiquidGlassSwitchView: UIControl, UIGestureRecognizerDelegate
     }
 
     public func setOn(_ on: Bool, animated: Bool) {
-        let changed = isOn != on
         isOn = on
         let targetX = on ? thumbMaxX : thumbMinX
 
         if animated {
             pendingCollapseWork?.cancel()
             thumbScaleAnimator.target = Constants.expandedScaleX
-            positionAnimator.target = targetX
             scheduleCollapse(delay: 0.2)
         } else {
             positionAnimator.setValue(targetX, animated: false)
             thumbScaleAnimator.setValue(1.0, animated: false)
             updateThumbFrame()
-        }
-
-        if changed {
-            sendActions(for: .valueChanged)
         }
     }
 

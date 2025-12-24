@@ -50,7 +50,7 @@ public final class SpringWobbleAnimator {
 
     public var maxVelocity: CGFloat = 1200.0
     public var stiffness: CGFloat = 280.0
-    public var damping: CGFloat = 22.0
+    public var damping: CGFloat = 13.0
     public var threshold: CGFloat = 0.005
 
     public var isSettled: Bool { !isActive }
@@ -92,7 +92,7 @@ public final class SpringWobbleAnimator {
     }
 
     private func clampToLimits(_ v: CGPoint) -> CGPoint {
-        let deformStrength: CGFloat = 0.4
+        let deformStrength: CGFloat = 0.6
         let maxVelForWidth = (limits.maxWidth - 1.0) / deformStrength * maxVelocity
         let minVelForWidth = (limits.minWidth - 1.0) / deformStrength * maxVelocity
 
@@ -143,7 +143,7 @@ public final class SpringWobbleAnimator {
     }
 
     public func triggerDrop() {
-        setVelocity(CGPoint(x: 0, y: 600))
+        setVelocity(CGPoint(x: 900, y: 150))
     }
 }
 

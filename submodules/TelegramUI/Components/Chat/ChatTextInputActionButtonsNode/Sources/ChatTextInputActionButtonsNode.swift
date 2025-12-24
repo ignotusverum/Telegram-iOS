@@ -237,13 +237,17 @@ public final class ChatTextInputActionButtonsNode: ASDisplayNode, ChatSendMessag
         self.micButton.layer.allowsGroupOpacity = true
         self.view.addSubview(self.micButtonBackgroundView)
         self.micButtonBackgroundView.contentView.addSubview(self.micButton)
-            
+
+        let micInteraction = LiquidGlassInteraction()
+        micInteraction.targetView = self.micButtonBackgroundView
+        self.micButton.addInteraction(micInteraction)
+
         self.addSubnode(self.sendContainerNode)
         self.sendContainerNode.view.addSubview(self.sendButtonBackgroundView)
         self.sendContainerNode.addSubnode(self.sendButton)
         self.sendContainerNode.addSubnode(self.textNode)
         self.view.addSubview(self.expandMediaInputButton)
-        
+
         self.expandMediaInputButton.highligthedChanged = { [weak self] highlighted in
             guard let self else {
                 return

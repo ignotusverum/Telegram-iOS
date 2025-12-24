@@ -8,6 +8,6 @@ public final class CustomLiquidGlassCapability {
         if #available(iOS 26.0, *) {
             return false
         }
-        return isEnabledBySettings && DeviceModel.current.hasA14OrNewerChip
+        return isEnabledBySettings //&& DeviceModel.current.hasA14OrNewerChip
     }
 }

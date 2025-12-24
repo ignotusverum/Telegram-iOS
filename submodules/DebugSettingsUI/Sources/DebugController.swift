@@ -229,8 +229,6 @@ private enum DebugControllerEntry: ItemListNodeEntry {
             return 38
         case .fakeGlass:
             return 39
-        case .customLiquidGlass:
-            return 106
         case .browserExperiment:
             return 40
         case .allForumsHaveTabs:
@@ -279,6 +277,8 @@ private enum DebugControllerEntry: ItemListNodeEntry {
             return 103
         case .versionInfo:
             return 104
+        case .customLiquidGlass:
+            return 105
         }
     }
     

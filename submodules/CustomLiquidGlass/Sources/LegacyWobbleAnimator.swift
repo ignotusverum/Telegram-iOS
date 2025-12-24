@@ -22,10 +22,10 @@ public final class LegacyWobbleAnimator {
     private var targetVelocity: CGPoint = .zero
 
     public var surfaceTension: CGFloat = 180.0
-    public var viscosity: CGFloat = 12.0
+    public var viscosity: CGFloat = 7.0
     public var inertia: CGFloat = 0.8
-    public var maxDeform: CGFloat = 0.2
-    public var velocityScale: CGFloat = 0.0008
+    public var maxDeform: CGFloat = 0.6
+    public var velocityScale: CGFloat = 0.0015
     public var idleTimeout: CGFloat = 0.3
 
     private var lastVelocityTrackTime: CFTimeInterval = 0
@@ -46,11 +46,12 @@ public final class LegacyWobbleAnimator {
     }
 
     public func triggerLift() {
-        velocity.y -= 800
+        velocity.y -= 400
     }
 
     public func triggerDrop() {
-        velocity.y += 600
+        velocity.x += 20
+        velocity.y += 20
     }
 
     public func reset() {

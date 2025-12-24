@@ -325,34 +325,38 @@ public class GlassBackgroundView: UIView {
     }
     
     public private(set) var params: Params?
-        
+
     public static var useCustomGlassImpl: Bool = false
 
-    public override init(frame: CGRect) {
+    public convenience override init(frame: CGRect) {
+        self.init(frame: frame, customBlurRadius: 8.0)
+    }
+
+    public init(frame: CGRect = .zero, customBlurRadius: CGFloat = 8.0) {
         if #available(iOS 26.0, *), !GlassBackgroundView.useCustomGlassImpl {
             self.backgroundNode = nil
-            
+
             let glassEffect = UIGlassEffect(style: .regular)
             glassEffect.isInteractive = false
             let nativeView = UIVisualEffectView(effect: glassEffect)
             self.nativeViewClippingContext = ClippingShapeContext(view: nativeView)
             self.nativeView = nativeView
-            
+
             let nativeParamsView = EffectSettingsContainerView(frame: CGRect())
             self.nativeParamsView = nativeParamsView
-            
+
             nativeParamsView.addSubview(nativeView)
-            
+
             self.foregroundView = nil
             self.shadowView = nil
         } else {
-            let backgroundNode = NavigationBackgroundNode(color: .black, enableBlur: true, customBlurRadius: 8.0)
+            let backgroundNode = NavigationBackgroundNode(color: .black, enableBlur: true, customBlurRadius: customBlurRadius)
             self.backgroundNode = backgroundNode
             self.nativeView = nil
             self.nativeViewClippingContext = nil
             self.nativeParamsView = nil
             self.foregroundView = UIImageView()
-            
+
             self.shadowView = UIImageView()
         }
         
