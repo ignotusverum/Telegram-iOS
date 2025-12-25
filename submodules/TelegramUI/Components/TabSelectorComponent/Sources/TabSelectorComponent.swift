@@ -378,13 +378,8 @@ public final class TabSelectorComponent: Component {
         private var pressGesture: UILongPressGestureRecognizer?
         private var visibleItems: [AnyHashable: VisibleItem] = [:]
 
-        private func shouldUseGlassSelection(for style: Style) -> Bool {
-            return style == .glass && CustomLiquidGlassCapability.isSupported
-        }
-
         private var isUsingGlassSelection: Bool {
-            guard let component = self.component else { return false }
-            return shouldUseGlassSelection(for: component.style)
+            CustomLiquidGlassCapability.isSupported
         }
 
         private var isPressing: Bool = false
@@ -542,9 +537,7 @@ public final class TabSelectorComponent: Component {
         }
 
         private func ensureSelectionView(for style: Style) {
-            let useGlass = shouldUseGlassSelection(for: style)
-
-            if useGlass {
+            if CustomLiquidGlassCapability.isSupported {
                 if self.glassSelectionView == nil {
                     let glassView = LiquidGlassTabSelectionView()
                     glassView.onLayoutUpdate = { [weak self] in

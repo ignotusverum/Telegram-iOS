@@ -24,7 +24,7 @@ final class LiquidGlassTabSelectionView: UIView {
         var hDeformWidthFactor: CGFloat = 0.35
         var hDeformHeightFactor: CGFloat = 0.25
 
-        var refractionStrength: Float = 8
+        var refractionStrength: Float = 0
         var specularIntensity: Float = 0
         var refractionZonePercent: Float = 0.35
         var edgeIntensity: Float = 0
