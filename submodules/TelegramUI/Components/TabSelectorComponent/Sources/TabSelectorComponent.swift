@@ -8,6 +8,7 @@ import MultilineTextWithEntitiesComponent
 import TextFormat
 import AccountContext
 import TelegramPresentationData
+import CustomLiquidGlass
 
 public final class TabSelectorComponent: Component {
     public enum Style {
@@ -371,10 +372,32 @@ public final class TabSelectorComponent: Component {
     public final class View: UIScrollView {
         private var component: TabSelectorComponent?
         private weak var state: EmptyComponentState?
-        
-        private let selectionView: UIImageView
+
+        private var legacySelectionView: UIImageView?
+        private var glassSelectionView: LiquidGlassTabSelectionView?
+        private var pressGesture: UILongPressGestureRecognizer?
         private var visibleItems: [AnyHashable: VisibleItem] = [:]
-        
+
+        private func shouldUseGlassSelection(for style: Style) -> Bool {
+            return style == .glass && CustomLiquidGlassCapability.isSupported
+        }
+
+        private var isUsingGlassSelection: Bool {
+            guard let component = self.component else { return false }
+            return shouldUseGlassSelection(for: component.style)
+        }
+
+        private var isPressing: Bool = false
+        private var lastPressLocation: CGPoint?
+
+        private var isGlassDragging: Bool = false
+        private var isAnimatingGlassSelection: Bool = false
+        private var dragStartX: CGFloat = 0
+        private var dragCurrentOffset: CGFloat = 0
+        private var dragVelocity: CGFloat = 0
+        private var lastDragTime: CFTimeInterval = 0
+        private var orderedItemFrames: [(id: AnyHashable, frame: CGRect)] = []
+
         private var didInitiallyScroll = false
         
         private var reorderRecognizer: ReorderGestureRecognizer?
@@ -382,10 +405,8 @@ public final class TabSelectorComponent: Component {
         private var reorderingItemPosition: (initial: CGFloat, offset: CGFloat) = (0.0, 0.0)
         
         override init(frame: CGRect) {
-            self.selectionView = UIImageView()
-            
             super.init(frame: frame)
-            
+
             self.showsVerticalScrollIndicator = false
             self.showsHorizontalScrollIndicator = false
             self.scrollsToTop = false
@@ -394,9 +415,7 @@ public final class TabSelectorComponent: Component {
             self.contentInsetAdjustmentBehavior = .never
             self.alwaysBounceVertical = false
             self.clipsToBounds = false
-            
-            self.addSubview(self.selectionView)
-            
+
             let reorderRecognizer = ReorderGestureRecognizer(
                 shouldBegin: { [weak self] point in
                     guard let self, let component = self.component, component.reorderItem != nil else {
@@ -521,12 +540,51 @@ public final class TabSelectorComponent: Component {
             }
             return nil
         }
-        
+
+        private func ensureSelectionView(for style: Style) {
+            let useGlass = shouldUseGlassSelection(for: style)
+
+            if useGlass {
+                if self.glassSelectionView == nil {
+                    let glassView = LiquidGlassTabSelectionView()
+                    glassView.onLayoutUpdate = { [weak self] in
+                        self?.updateGlassSelectionLayout()
+                    }
+                    self.addSubview(glassView)
+                    self.sendSubviewToBack(glassView)
+                    self.glassSelectionView = glassView
+
+                    let pressGesture = UILongPressGestureRecognizer(target: self, action: #selector(self.handlePressGesture(_:)))
+                    pressGesture.minimumPressDuration = 0.0
+                    pressGesture.delegate = self
+                    self.addGestureRecognizer(pressGesture)
+                    self.pressGesture = pressGesture
+                }
+                self.glassSelectionView?.isHidden = false
+                self.legacySelectionView?.isHidden = true
+            } else {
+                if self.legacySelectionView == nil {
+                    let legacyView = UIImageView()
+                    self.addSubview(legacyView)
+                    self.sendSubviewToBack(legacyView)
+                    self.legacySelectionView = legacyView
+                }
+                self.legacySelectionView?.isHidden = false
+                self.glassSelectionView?.isHidden = true
+                if let pressGesture = self.pressGesture {
+                    self.removeGestureRecognizer(pressGesture)
+                    self.pressGesture = nil
+                }
+            }
+        }
+
         func update(component: TabSelectorComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             let selectionColorUpdated = component.colors.selection != self.component?.colors.selection
-           
+
             self.component = component
             self.state = state
+
+            self.ensureSelectionView(for: component.style)
             
             self.reorderRecognizer?.isEnabled = component.reorderItem != nil
             
@@ -561,7 +619,7 @@ public final class TabSelectorComponent: Component {
             
             if selectionColorUpdated {
                 if isLineSelection {
-                    self.selectionView.image = generateImage(CGSize(width: 5.0, height: 3.0), rotatedContext: { size, context in
+                    let lineImage = generateImage(CGSize(width: 5.0, height: 3.0), rotatedContext: { size, context in
                         context.clear(CGRect(origin: CGPoint(), size: size))
                         context.setFillColor(component.colors.selection.cgColor)
                         context.fillEllipse(in: CGRect(origin: CGPoint(), size: CGSize(width: 4.0, height: 4.0)))
@@ -569,8 +627,20 @@ public final class TabSelectorComponent: Component {
                         context.fill(CGRect(x: 2.0, y: 0.0, width: size.width - 4.0, height: 4.0))
                         context.fill(CGRect(x: 0.0, y: 2.0, width: size.width, height: 2.0))
                     })?.resizableImage(withCapInsets: UIEdgeInsets(top: 3.0, left: 3.0, bottom: 0.0, right: 3.0), resizingMode: .stretch)
+                    self.legacySelectionView?.image = lineImage
+                    self.glassSelectionView?.updateAppearance(
+                        image: lineImage,
+                        tintColor: component.colors.selection,
+                        isDark: component.theme.overallDarkAppearance
+                    )
                 } else {
-                    self.selectionView.image = generateStretchableFilledCircleImage(diameter: baseHeight, color: component.colors.selection)
+                    let circleImage = generateStretchableFilledCircleImage(diameter: baseHeight, color: component.colors.selection)
+                    self.legacySelectionView?.image = circleImage
+                    self.glassSelectionView?.updateAppearance(
+                        image: circleImage,
+                        tintColor: component.colors.selection,
+                        isDark: component.theme.overallDarkAppearance
+                    )
                 }
             }
             
@@ -596,7 +666,11 @@ public final class TabSelectorComponent: Component {
                         guard let item = component.items.first(where: { $0.id == itemId }) else {
                             return
                         }
-                        component.setSelectedId(item.id)
+                        if self.isUsingGlassSelection {
+                            self.animateSelection(to: item.id)
+                        } else {
+                            component.setSelectedId(item.id)
+                        }
                     }, contextAction: { [weak self] sourceNode, gesture in
                         guard let self, let component = self.component else {
                             return
@@ -669,7 +743,8 @@ public final class TabSelectorComponent: Component {
             var selectedBackgroundRect: CGRect?
             var nextBackgroundRect: CGRect?
             var selectedItemIsReordering = false
-            
+            var newOrderedItemFrames: [(id: AnyHashable, frame: CGRect)] = []
+
             for item in component.items {
                 guard let (itemView, itemSize, itemTransition) = itemViews[item.id] else {
                     continue
@@ -682,13 +757,15 @@ public final class TabSelectorComponent: Component {
                 let itemTitleFrame = CGRect(origin: CGPoint(x: baseItemTitleFrame.minX - itemBackgroundRect.minX, y: baseItemTitleFrame.minY - itemBackgroundRect.minY), size: baseItemTitleFrame.size)
                 contentWidth = itemBackgroundRect.maxX
                 
+                newOrderedItemFrames.append((id: item.id, frame: itemBackgroundRect))
+
                 if self.reorderingItem === itemView {
                     itemBackgroundRect.origin.x = self.reorderingItemPosition.initial + self.reorderingItemPosition.offset
                     if item.id == component.selectedId {
                         selectedItemIsReordering = true
                     }
                 }
-                
+
                 if item.id == component.selectedId {
                     selectedBackgroundRect = itemBackgroundRect
                 }
@@ -735,7 +812,20 @@ public final class TabSelectorComponent: Component {
                 }
             }
             contentWidth += spacing
-            
+            self.orderedItemFrames = newOrderedItemFrames
+
+            if let glassView = self.glassSelectionView, !newOrderedItemFrames.isEmpty {
+                let firstFrame = newOrderedItemFrames.first!.frame
+                let lastFrame = newOrderedItemFrames.last!.frame
+                let fullArea = CGRect(
+                    x: firstFrame.minX,
+                    y: firstFrame.minY,
+                    width: lastFrame.maxX - firstFrame.minX,
+                    height: max(firstFrame.height, lastFrame.height)
+                )
+                glassView.fullContentArea = fullArea
+            }
+
             var removeIds: [AnyHashable] = []
             for (id, itemView) in self.visibleItems {
                 if !validIds.contains(id) {
@@ -748,8 +838,9 @@ public final class TabSelectorComponent: Component {
             }
             
             if let selectedBackgroundRect {
-                self.selectionView.alpha = 1.0
-                                
+                self.legacySelectionView?.alpha = 1.0
+                self.glassSelectionView?.alpha = 1.0
+
                 if isLineSelection {
                     var effectiveBackgroundRect = selectedBackgroundRect
                     if let transitionFraction = component.transitionFraction {
@@ -763,24 +854,74 @@ public final class TabSelectorComponent: Component {
                             }
                         }
                     }
-                    
+
                     var mappedSelectionFrame = effectiveBackgroundRect.insetBy(dx: innerInset, dy: 0.0)
                     mappedSelectionFrame.origin.y = mappedSelectionFrame.maxY + 7.0
                     mappedSelectionFrame.size.height = 3.0
-                    transition.setPosition(view: self.selectionView, position: mappedSelectionFrame.center)
-                    transition.setBounds(view: self.selectionView, bounds: CGRect(origin: CGPoint(), size: mappedSelectionFrame.size))
-                    transition.setTransform(view: self.selectionView, transform: CATransform3DIdentity)
+                    if let legacyView = self.legacySelectionView {
+                        transition.setPosition(view: legacyView, position: mappedSelectionFrame.center)
+                        transition.setBounds(view: legacyView, bounds: CGRect(origin: CGPoint(), size: mappedSelectionFrame.size))
+                        transition.setTransform(view: legacyView, transform: CATransform3DIdentity)
+                    }
+                    if let glassView = self.glassSelectionView {
+                        glassView.baseFrame = mappedSelectionFrame
+                    }
                 } else {
-                    transition.setPosition(view: self.selectionView, position: selectedBackgroundRect.center)
-                    transition.setBounds(view: self.selectionView, bounds: CGRect(origin: CGPoint(), size: selectedBackgroundRect.size))
-                    if selectedItemIsReordering {
-                        transition.setTransform(view: self.selectionView, transform: CATransform3DMakeScale(1.1, 1.1, 1.0))
-                    } else {
-                        transition.setTransform(view: self.selectionView, transform: CATransform3DIdentity)
+                    // Apply transitionFraction interpolation for swipe gestures
+                    var effectiveBackgroundRect = selectedBackgroundRect
+                    if let transitionFraction = component.transitionFraction {
+                        if transitionFraction < 0.0 {
+                            if let previousBackgroundRect {
+                                effectiveBackgroundRect = effectiveBackgroundRect.interpolate(
+                                    with: previousBackgroundRect,
+                                    fraction: abs(transitionFraction)
+                                )
+                            }
+                        } else if transitionFraction > 0.0 {
+                            if let nextBackgroundRect {
+                                effectiveBackgroundRect = effectiveBackgroundRect.interpolate(
+                                    with: nextBackgroundRect,
+                                    fraction: abs(transitionFraction)
+                                )
+                            }
+                        }
+                    }
+
+                    if let legacyView = self.legacySelectionView {
+                        transition.setPosition(view: legacyView, position: effectiveBackgroundRect.center)
+                        transition.setBounds(view: legacyView, bounds: CGRect(origin: CGPoint(), size: effectiveBackgroundRect.size))
+                        if selectedItemIsReordering {
+                            transition.setTransform(view: legacyView, transform: CATransform3DMakeScale(1.1, 1.1, 1.0))
+                        } else {
+                            transition.setTransform(view: legacyView, transform: CATransform3DIdentity)
+                        }
+                    }
+                    if let glassView = self.glassSelectionView {
+                        // Don't update baseFrame if we're animating - let the animation control it
+                        if !self.isAnimatingGlassSelection && !self.isGlassDragging {
+                            glassView.baseFrame = effectiveBackgroundRect
+                        } else if self.isGlassDragging {
+                            let glassFrame = self.calculateDraggedFrame(
+                                selectedRect: selectedBackgroundRect,
+                                offset: self.dragCurrentOffset
+                            )
+                            glassView.baseFrame = glassFrame
+                        }
+
+                        if self.isGlassDragging || (component.transitionFraction ?? 0) != 0 {
+                            if !glassView.isLifted {
+                                glassView.expand()
+                            }
+                        } else {
+                            if glassView.isLifted && !self.isPressing && !self.isAnimatingGlassSelection {
+                                glassView.collapse()
+                            }
+                        }
                     }
                 }
             } else {
-                self.selectionView.alpha = 0.0
+                self.legacySelectionView?.alpha = 0.0
+                self.glassSelectionView?.alpha = 0.0
             }
             
             let contentSize = CGSize(width: contentWidth, height: baseHeight + verticalInset * 2.0)
@@ -803,8 +944,208 @@ public final class TabSelectorComponent: Component {
             
             return size
         }
+
+        private func updateGlassSelectionLayout() {
+        }
+
+        func animateSelection(to targetId: AnyHashable) {
+            guard let glassView = self.glassSelectionView,
+                  let component = self.component,
+                  let targetFrame = self.orderedItemFrames.first(where: { $0.id == targetId })?.frame,
+                  targetId != component.selectedId else {
+                return
+            }
+
+            self.isAnimatingGlassSelection = true
+
+            if !self.orderedItemFrames.isEmpty {
+                let firstFrame = self.orderedItemFrames.first!.frame
+                let lastFrame = self.orderedItemFrames.last!.frame
+                glassView.fullContentArea = CGRect(
+                    x: firstFrame.minX,
+                    y: firstFrame.minY,
+                    width: lastFrame.maxX - firstFrame.minX,
+                    height: max(firstFrame.height, lastFrame.height)
+                )
+            }
+
+            glassView.transitionToFrame(targetFrame, animated: true)
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                guard let self else { return }
+                component.setSelectedId(targetId)
+                self.state?.updated(transition: .immediate)
+                self.isAnimatingGlassSelection = false
+            }
+        }
+
+        private func calculateDraggedFrame(selectedRect: CGRect, offset: CGFloat) -> CGRect {
+            guard self.orderedItemFrames.count >= 2 else { return selectedRect }
+
+            let fingerX = self.dragStartX + offset
+
+            let firstFrame = self.orderedItemFrames.first!.frame
+            let lastFrame = self.orderedItemFrames.last!.frame
+
+            if fingerX <= firstFrame.midX {
+                return firstFrame
+            }
+            if fingerX >= lastFrame.midX {
+                return lastFrame
+            }
+
+            for i in 0..<(self.orderedItemFrames.count - 1) {
+                let leftFrame = self.orderedItemFrames[i].frame
+                let rightFrame = self.orderedItemFrames[i + 1].frame
+
+                if fingerX >= leftFrame.midX && fingerX <= rightFrame.midX {
+                    let distance = rightFrame.midX - leftFrame.midX
+                    let fraction = (fingerX - leftFrame.midX) / distance
+                    return leftFrame.interpolate(with: rightFrame, fraction: fraction)
+                }
+            }
+
+            return selectedRect
+        }
+
+        private func findTargetTabId(offset: CGFloat, velocity: CGFloat) -> AnyHashable? {
+            guard !self.orderedItemFrames.isEmpty else { return nil }
+
+            let fingerX = self.dragStartX + offset
+            let velocityThreshold: CGFloat = 500.0
+
+            var nearestId: AnyHashable?
+            var nearestDistance: CGFloat = .greatestFiniteMagnitude
+
+            for (id, frame) in self.orderedItemFrames {
+                let distance = abs(frame.midX - fingerX)
+                if distance < nearestDistance {
+                    nearestDistance = distance
+                    nearestId = id
+                }
+            }
+
+            if abs(velocity) > velocityThreshold, let nearestIndex = self.orderedItemFrames.firstIndex(where: { $0.id == nearestId }) {
+                if velocity < 0 && nearestIndex > 0 {
+                    if fingerX < self.orderedItemFrames[nearestIndex].frame.midX {
+                        nearestId = self.orderedItemFrames[nearestIndex - 1].id
+                    }
+                } else if velocity > 0 && nearestIndex < self.orderedItemFrames.count - 1 {
+                    if fingerX > self.orderedItemFrames[nearestIndex].frame.midX {
+                        nearestId = self.orderedItemFrames[nearestIndex + 1].id
+                    }
+                }
+            }
+
+            return nearestId
+        }
+
+        @objc private func handlePressGesture(_ gesture: UILongPressGestureRecognizer) {
+            guard let glassView = self.glassSelectionView,
+                  let component = self.component else {
+                return
+            }
+
+            let location = gesture.location(in: self)
+
+            switch gesture.state {
+            case .began:
+                var pressedOnTab = false
+                for (_, item) in self.visibleItems {
+                    if item.frame.contains(location) {
+                        pressedOnTab = true
+                        break
+                    }
+                }
+                if pressedOnTab {
+                    self.isPressing = true
+                    self.isGlassDragging = true
+                    self.dragStartX = location.x
+                    self.dragCurrentOffset = 0
+                    self.lastPressLocation = location
+
+                    if !self.orderedItemFrames.isEmpty {
+                        let firstFrame = self.orderedItemFrames.first!.frame
+                        let lastFrame = self.orderedItemFrames.last!.frame
+                        glassView.fullContentArea = CGRect(
+                            x: firstFrame.minX,
+                            y: firstFrame.minY,
+                            width: lastFrame.maxX - firstFrame.minX,
+                            height: max(firstFrame.height, lastFrame.height)
+                        )
+                    }
+
+                    glassView.expand()
+                    glassView.requestBackdropCapture()
+                }
+            case .changed:
+                if self.isPressing {
+                    let now = CACurrentMediaTime()
+                    if let lastLocation = self.lastPressLocation {
+                        let deltaX = location.x - lastLocation.x
+                        let dt = self.lastDragTime > 0 ? max(now - self.lastDragTime, 1.0/120.0) : 1.0/60.0
+                        self.dragVelocity = deltaX / CGFloat(dt)
+                    }
+                    self.lastPressLocation = location
+                    self.lastDragTime = now
+
+                    if self.isGlassDragging {
+                        self.dragCurrentOffset = location.x - self.dragStartX
+                        let newFrame = self.calculateDraggedFrame(selectedRect: glassView.baseFrame, offset: self.dragCurrentOffset)
+                        glassView.baseFrame = newFrame
+                    }
+                }
+            case .ended, .cancelled, .failed:
+                if self.isPressing {
+                    var targetFrame = glassView.baseFrame
+                    var newSelectedId: AnyHashable?
+
+                    if self.isGlassDragging {
+                        if let targetId = self.findTargetTabId(offset: self.dragCurrentOffset, velocity: self.dragVelocity) {
+                            newSelectedId = targetId
+                            if let frame = self.orderedItemFrames.first(where: { $0.id == targetId })?.frame {
+                                targetFrame = frame
+                            }
+                        } else if let currentId = component.selectedId,
+                                  let frame = self.orderedItemFrames.first(where: { $0.id == currentId })?.frame {
+                            targetFrame = frame
+                        }
+                    }
+
+                    self.isPressing = false
+                    self.isGlassDragging = false
+                    self.isAnimatingGlassSelection = true
+                    self.dragCurrentOffset = 0
+                    self.dragVelocity = 0
+                    self.lastDragTime = 0
+                    self.lastPressLocation = nil
+
+                    glassView.releaseVelocity()
+                    glassView.transitionToFrame(targetFrame, animated: true)
+
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                        guard let self else { return }
+                        if let newId = newSelectedId {
+                            component.setSelectedId(newId)
+                        }
+                        self.state?.updated(transition: .immediate)
+                        self.isAnimatingGlassSelection = false
+                    }
+                }
+            default:
+                break
+            }
+        }
     }
-    
+}
+
+extension TabSelectorComponent.View: UIGestureRecognizerDelegate {
+    public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
+    }
+}
+
+extension TabSelectorComponent {
     public func makeView() -> View {
         return View(frame: CGRect())
     }

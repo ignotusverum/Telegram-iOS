@@ -18,6 +18,8 @@ swift_library(
         "//submodules/TextFormat",
         "//submodules/AccountContext",
         "//submodules/TelegramPresentationData",
+        "//submodules/CustomLiquidGlass",
+        "//submodules/TelegramUI/Components/LiquidLens",
     ],
     visibility = [
         "//visibility:public",

@@ -34,7 +34,15 @@ public final class ItemListControllerSegmentedTitleView: UIView {
     
     private var validLayout: CGSize?
     private var animateLayout: Bool = false
-    
+
+    public var transitionFraction: CGFloat? {
+        didSet {
+            if self.transitionFraction != oldValue {
+                self.setNeedsLayout()
+            }
+        }
+    }
+
     public var indexUpdated: ((Int) -> Void)?
     
     public init(theme: PresentationTheme, segments: [String], selectedIndex: Int) {
@@ -55,6 +63,7 @@ public final class ItemListControllerSegmentedTitleView: UIView {
         let size = self.bounds.size
         self.validLayout = size
         self.update(transition: .immediate)
+
     }
     
     private func update(transition: ComponentTransition) {
@@ -94,7 +103,8 @@ public final class ItemListControllerSegmentedTitleView: UIView {
                         return
                     }
                     self.indexUpdated?(index)
-                }
+                },
+                transitionFraction: self.transitionFraction
             )),
             environment: {},
             containerSize: CGSize(width: size.width, height: 44.0)

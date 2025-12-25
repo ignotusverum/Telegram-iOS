@@ -360,7 +360,21 @@ open class ItemListController: ViewController, KeyShortcutResponder, Presentable
                                 }
                                 strongSelf.navigationBar?.setContentNode(nil, animated: false)
                                 if strongSelf.isNodeLoaded {
-                                    strongSelf.controllerNode.panRecognizer?.isEnabled = false
+                                    strongSelf.controllerNode.panTransitionFractionChanged = { [weak self] transitionFraction in
+                                        if let strongSelf = self {
+                                            strongSelf.segmentedTitleView?.transitionFraction = transitionFraction
+                                        }
+                                    }
+                                    strongSelf.controllerNode.panGestureAllowedDirections = {
+                                        if index == 0 {
+                                            return [.leftCenter]
+                                        } else if index == sections.count - 1 {
+                                            return [.rightCenter]
+                                        } else {
+                                            return [.leftCenter, .rightCenter]
+                                        }
+                                    }
+                                    strongSelf.controllerNode.panRecognizer?.isEnabled = true
                                 }
                             case let .textWithTabs(title, sections, index):
                                 strongSelf.title = title
